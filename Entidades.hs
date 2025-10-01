@@ -40,14 +40,14 @@ data RobotData =
     RobotData {
         imagenCannon :: String,
         energy :: Float ,
-        range :: Float ,
+        range :: Float 
         } 
         deriving (Show, Eq)
 
 data ProyectilData = 
     ProyectilData {
       damage :: Float,
-      existingTime :: Tiempo,
+      existingTime :: Tiempo
     }
     deriving (Show, Eq)
 
