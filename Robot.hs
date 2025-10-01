@@ -3,8 +3,8 @@ module Robots
   , updateRobotVelocity, updateVelocity, updatePosition
   ) where
 
-import Entities
-import Physics
+import Entidades
+import Fisicas
 
 detectedAgent :: Robot -> Robot -> Bool
 detectedAgent r1 r2 =
