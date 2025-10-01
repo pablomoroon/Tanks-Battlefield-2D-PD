@@ -1,0 +1,73 @@
+module Entidades
+  ( Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale
+  , Robot(..), Proyectil(..), Action(..), GameState(..)
+  ) where
+  
+
+type Point = (Float, Float)
+
+type Vector = (Float, Float)
+
+type Angle = Float
+
+type Distance = Float
+
+type Tiempo = Float
+
+type Position = (Float, Float)
+
+type Velocity = (Float, Float)
+
+type Size = (Float, Float)
+
+type Scale = (Float, Float)
+
+data Objeto a = 
+    Objeto  {
+        position :: Position,
+        velocity :: Velocity,
+        angulo :: Angle, 
+        explosion :: Bool, 
+        size :: Size,
+        imagenObjeto :: String,
+        extras :: a
+    }
+    deriving (Show, Eq)
+
+
+
+data RobotData =
+    RobotData {
+        imagenCannon :: String,
+        energy :: Float ,
+        range :: Float ,
+        } 
+        deriving (Show, Eq)
+
+data ProyectilData = 
+    ProyectilData {
+      damage :: Float,
+      existingTime :: Tiempo,
+    }
+    deriving (Show, Eq)
+
+type Robot = Objeto RobotData
+type Proyectil = Objeto ProyectilData
+
+data Action =
+    Action{
+      stop :: Bool,
+      direction :: Vector,
+      acelerate :: Float,
+      shoot :: Bool
+    }
+    deriving (Show, Eq)
+
+data GameState = 
+  GameState {
+    imagenM :: String,
+    size :: Size,
+    nProyectiles :: Integer,
+    nTanques :: Integer
+  }
+  deriving (Show, Eq)
