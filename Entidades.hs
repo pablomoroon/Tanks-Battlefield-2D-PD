@@ -1,6 +1,6 @@
 module Entidades
-  ( Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale
-  , Robot(..), Proyectil(..), Action(..), GameState(..)
+  ( Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale, Objeto(..)
+  , RobotData(..), ProyectilData(..), Robot(..), Proyectil(..), Action(..), GameState(..)
   ) where
   
 
@@ -66,8 +66,19 @@ data Action =
 data GameState = 
   GameState {
     imagenM :: String,
-    size :: Size,
+    sizeM :: Size,
     nProyectiles :: Integer,
     nTanques :: Integer
   }
   deriving (Show, Eq)
+
+
+data BotAction = 
+      Move Position
+    | Rotate Angle
+    | Acelerate Float
+    | Shoot
+    | Stop
+    | Combo [BotAction]
+
+

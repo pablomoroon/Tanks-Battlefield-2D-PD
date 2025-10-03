@@ -43,3 +43,5 @@ isInBounds (x, y) (width, height) =
 
 mul :: Size -> Scale -> Size
 mul (w,h) (sw, sh) = (w * sw, h * sh)
+
+
