@@ -1,6 +1,6 @@
 module Entidades
   ( Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale, Objeto(..)
-  , RobotData(..), ProyectilData(..), Robot(..), Proyectil(..), Action(..), GameState(..)
+  , RobotData(..), ProyectilData(..), Robot(..), Proyectil(..), Action(..), GameState(..), BotAction(..)
   ) where
   
 

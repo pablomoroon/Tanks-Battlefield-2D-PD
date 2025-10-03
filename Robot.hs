@@ -32,11 +32,15 @@ updatePosition r t =
 
 
 
-botDecision :: GameState -> Robot -> [Robot]-> [BotAction]
-botDecision
-botDecision gs r enemies
-| energy (extras r) < 20 = [Stop]   
-| null enemies = [Stop]
-| otherwise =
+botDecision :: GameState -> Robot -> [Robot] -> [BotAction]
+botDecision _ r [] = [Stop]
+botDecision _ r enemies
+  | detectedAgent r enemy = [Rotate (angleToTarget (position r) (position enemy)), Shoot]
+  | energy (extras r) < 20 = [Stop]
+  | otherwise              = [Move (position enemy)]
+  where
+    enemy = foldl1 (\e1 e2 -> 
+              if distanceBetween (position r) (position e1) < distanceBetween (position r) (position e2) then e1 else e2) enemies
+
 
       
