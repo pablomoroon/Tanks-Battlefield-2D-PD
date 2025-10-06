@@ -9,9 +9,7 @@ import Entidades
 import Fisicas
 import Data.List (tails)
 
-------------------------------------------------------------
--- === Funciones geométricas auxiliares ===
-------------------------------------------------------------
+
 projectPolygon :: [Point] -> Vector -> (Float, Float)
 projectPolygon verts axis = (minimum values, maximum values)
   where
@@ -36,9 +34,9 @@ satCollision verts1 verts2 =
                                (projectPolygon verts2 nAxis)
       where nAxis = normalize axis
 
-------------------------------------------------------------
--- === Conversión de objetos a sus vértices reales ===
-------------------------------------------------------------
+
+--Conversión de objetos a sus vértices reales 
+
 objectVertices :: Objeto a -> [Point]
 objectVertices obj =
   [ (vx + x, vy + y) | (vx, vy) <- rotated ]
@@ -50,9 +48,6 @@ objectVertices obj =
     baseVerts = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]
     rotated   = getVertices (baseVerts !! 0, baseVerts !! 1, baseVerts !! 2, baseVerts !! 3, angulo obj)
 
-------------------------------------------------------------
--- === Detección de colisiones ===
-------------------------------------------------------------
 checkCollision :: Objeto a -> Objeto b -> Bool
 checkCollision o1 o2 =
   satCollision (objectVertices o1) (objectVertices o2)
