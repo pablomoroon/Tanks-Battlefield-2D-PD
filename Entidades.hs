@@ -77,7 +77,7 @@ data GameState =
 data BotAction = 
       Move Position
     | Rotate Angle
-    | Acelerate Float
+    | Accelerate Float
     | Shoot
     | Stop
     | Combo [BotAction]
