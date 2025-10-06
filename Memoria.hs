@@ -6,7 +6,7 @@ delete,exist,
 
 import qualified Data.Map.Strict as Map
 import Entidades
-import qualified Control.Monad.RWS.Class as Map
+
 data Value = VInt Int
   | VFloat Float
   | VString String

@@ -59,7 +59,7 @@ data Action =
     Action{
       stop :: Bool,
       direction :: Vector,
-      acelerate :: Float,
+      accelerate :: Float,
       shoot :: Bool
     }
     deriving (Show, Eq)
@@ -68,8 +68,8 @@ data GameState =
   GameState {
     imagenM :: String,
     sizeM :: Size,
-    nProyectiles :: Integer,
-    nTanques :: Integer
+    nProyectiles :: Int,
+    nTanques :: Int
   }
   deriving (Show, Eq)
 

@@ -1,6 +1,6 @@
 module Robot
   ( detectedAgent, isRobotAlive, countActiveRobots
-  , updateRobotVelocity, updateVelocity, updatePosition
+  , updateRobotVelocity, updateVelocity, updatePosition, botDecision
   ) where
 
 import Entidades
@@ -26,21 +26,24 @@ updateVelocity (Action stop (dx, dy) a shoot) r
 
 updatePosition :: Robot -> Tiempo -> Robot
 updatePosition r t =
-  let (x,y)   = position r
-      (vx,vy) = velocity r
-  in r { position = (x + vx*t, y + vy*t) }
+  r { position = (x + vx*t, y + vy*t) }
+  where
+    (x, y)   = position r
+    (vx, vy) = velocity r
 
 
 
 botDecision :: GameState -> Robot -> [Robot] -> [BotAction]
 botDecision _ r [] = [Stop]
 botDecision _ r enemies
-  | detectedAgent r enemy = [Rotate (angleToTarget (position r) (position enemy)), Shoot]
-  | energy (extras r) < 20 = [Stop]
+  | energy (extras r) < 20 =
+      if detectedAgent r enemy
+        then [Rotate (angleToTarget (position r) (position enemy)), Shoot]
+        else [Rotate (angleToTarget (position r) (position enemy)), Stop]
+  | detectedAgent r enemy  = [Rotate (angleToTarget (position r) (position enemy)), Shoot]
   | otherwise              = [Move (position enemy)]
   where
     enemy = foldl1 (\e1 e2 -> 
               if distanceBetween (position r) (position e1) < distanceBetween (position r) (position e2) then e1 else e2) enemies
-
 
       
