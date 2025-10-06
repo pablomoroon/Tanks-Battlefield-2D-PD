@@ -1,4 +1,4 @@
-module Robots
+module Robot
   ( detectedAgent, isRobotAlive, countActiveRobots
   , updateRobotVelocity, updateVelocity, updatePosition
   ) where

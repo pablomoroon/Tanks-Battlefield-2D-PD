@@ -1,7 +1,7 @@
 module Memoria 
 (Value(..),Memoria,vacia,
 save,obtener,
-delete,exist,upgrade,upgradeX1,
+delete,exist,
 ) where
 
 import qualified Data.Map.Strict as Map
@@ -24,7 +24,7 @@ type Memoria=Map.Map String Value
 vacia::Memoria
 vacia = Map.empty
 
-save::String->String->Value->Memoria
+save::String->Value->Memoria->Memoria
 save=Map.insert
 
 
