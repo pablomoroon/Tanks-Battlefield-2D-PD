@@ -24,6 +24,7 @@ type Scale = (Float, Float)
 
 data Objeto a = 
     Objeto  {
+        objectId :: Integer,
         position :: Position,
         velocity :: Velocity,
         angulo :: Angle, 
