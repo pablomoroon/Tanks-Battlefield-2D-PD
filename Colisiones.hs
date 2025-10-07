@@ -67,7 +67,7 @@ detectRobotRobotCollisions robots =
   , r2 <- rest
   , checkCollision r1 r2
   ]
-
+ 
 checkCollisions :: [Robot] -> [Proyectil] -> ([(Int, Int)], [(Int, Int)])
 checkCollisions robots projectiles =
   (detectRobotRobotCollisions robots, detectRobotProjectileCollisions robots projectiles)

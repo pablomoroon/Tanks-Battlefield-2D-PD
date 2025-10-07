@@ -6,7 +6,7 @@ delete,exist,
 
 import qualified Data.Map.Strict as Map
 import Entidades
-
+ 
 data Value = VInt Int
   | VFloat Float
   | VString String

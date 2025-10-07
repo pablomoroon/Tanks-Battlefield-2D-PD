@@ -73,7 +73,7 @@ data GameState =
   }
   deriving (Show, Eq)
 
-
+ 
 data BotAction = 
       Move Position
     | Rotate Angle

@@ -46,4 +46,4 @@ botDecision _ r enemies
     enemy = foldl1 (\e1 e2 -> 
               if distanceBetween (position r) (position e1) < distanceBetween (position r) (position e2) then e1 else e2) enemies
 
-      
+       
