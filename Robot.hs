@@ -5,36 +5,30 @@ module Robot
 
 import Entidades
 import Fisicas
+import Control.Applicative (liftA2)
 
 detectedAgent :: Robot -> Robot -> Bool
-detectedAgent r1 r2 =
-  distanceBetween (position r1) (position r2) <= range (extras r1)
+detectedAgent r1 r2 = distanceBetween (position r1) (position r2) <= range (extras r1)
 
 isRobotAlive :: Robot -> Bool
 isRobotAlive r = energy (extras r) > 0
 
 countActiveRobots :: [Robot] -> Int
-countActiveRobots rs = length [r | r <- rs, isRobotAlive r]
+countActiveRobots = length . filter isRobotAlive
 
 updateRobotVelocity :: Robot -> Velocity -> Robot
 updateRobotVelocity r v = r { velocity = v }
 
 updateVelocity :: Action -> Robot -> Robot
-updateVelocity (Action stop (dx, dy) a shoot) r 
-    | stop == True = r { velocity = (0, 0)}
-    | otherwise = r { velocity = (fst(velocity r) + a*dx, snd(velocity r) + a*dy)}
+updateVelocity (Action stop dir a _shoot) r
+  | stop      = r { velocity = pure 0 }
+  | otherwise = r { velocity = velocity r ^+^ (dir ^* a) }
 
 updatePosition :: Robot -> Tiempo -> Robot
-updatePosition r t =
-  r { position = (x + vx*t, y + vy*t) }
-  where
-    (x, y)   = position r
-    (vx, vy) = velocity r
-
-
+updatePosition r dt = r { position = position r ^+^ (velocity r ^* dt) }
 
 botDecision :: GameState -> Robot -> [Robot] -> [BotAction]
-botDecision _ r [] = [Stop]
+botDecision _ _ [] = [Stop]
 botDecision _ r enemies
   | energy (extras r) < 20 =
       if detectedAgent r enemy
@@ -43,7 +37,7 @@ botDecision _ r enemies
   | detectedAgent r enemy  = [Rotate (angleToTarget (position r) (position enemy)), Shoot]
   | otherwise              = [Move (position enemy)]
   where
-    enemy = foldl1 (\e1 e2 -> 
-              if distanceBetween (position r) (position e1) < distanceBetween (position r) (position e2) then e1 else e2) enemies
-
-       
+    nearest a b =
+      if distanceBetween (position r) (position a) < distanceBetween (position r) (position b)
+        then a else b
+    enemy = foldl1 nearest enemies

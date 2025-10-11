@@ -3,7 +3,7 @@ import Graphics.Gloss
 main :: IO ()
 main = animate ventana fondo imagen
   where
-    ventana = InWindow "Pentágono animado" (800, 600) (100, 100)
+    ventana = InWindow "Animate" (800, 600) (100, 100)
     fondo   = white
     --imagen t = Translate (100 * cos t) (100 * sin t) (color red (pentagono 100))
     imagen t = Rotate (45*t) $

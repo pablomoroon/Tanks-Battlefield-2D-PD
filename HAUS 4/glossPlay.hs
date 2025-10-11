@@ -8,7 +8,7 @@ type Mundo = (Float, Float)
 main :: IO ()
 main = play ventana fondo fps (0, 0) dibujar manejarEvento actualizar
   where
-    ventana = InWindow "Control con Flechas, Teclas y Ratón" (800, 600) (100, 100)
+    ventana = InWindow "Control con Flechas, Teclas y Raton" (800, 600) (100, 100)
     fondo   = white
     fps     = 60
 

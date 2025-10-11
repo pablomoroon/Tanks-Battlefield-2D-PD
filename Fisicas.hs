@@ -1,16 +1,18 @@
 module Fisicas
-    (distanceBetween, angleToTarget, deg2rad, rad2deg, subVec, getVertices, dot, sub, perp, isInBounds, mul
-    )where
+  ( distanceBetween, angleToTarget, deg2rad, rad2deg
+  , subVec, getVertices, dot, sub, perp, isInBounds, mul, normalize
+  ) where
 
 import Entidades
- 
+import Control.Applicative (liftA2)
+
 distanceBetween :: Position -> Position -> Distance
-distanceBetween (x1, y1) (x2, y2) =
-  sqrt ((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+distanceBetween p1 p2 = sqrt (dx*dx + dy*dy)
+  where
+    V2 dx dy = p2 ^-^ p1
 
 angleToTarget :: Position -> Position -> Angle
-angleToTarget (x1, y1) (x2, y2) =
-  atan2 (y2 - y1) (x2 - x1)   -- Se usa atan2 ya que es una comparación de coordenadas
+angleToTarget (V2 x1 y1) (V2 x2 y2) = atan2 (y2 - y1) (x2 - x1)
 
 deg2rad :: Angle -> Angle
 deg2rad x = x * pi / 180
@@ -18,30 +20,34 @@ deg2rad x = x * pi / 180
 rad2deg :: Angle -> Angle
 rad2deg x = x * 180 / pi
 
-subVec :: Vector -> Vector -> Vector
-subVec (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
+dot :: Vec2 Float -> Vec2 Float -> Float
+dot (V2 x1 y1) (V2 x2 y2) = x1*x2 + y1*y2
 
-getVertices :: (Point, Point, Point, Point, Angle) -> [Point]
-getVertices ((x1, y1), (x2, y2), (x3, y3), (x4, y4), angulo) =
-  let radianes = deg2rad angulo   -- El let es una definición local, solo sirve aquí
-      rot (x, y) = (x * cos radianes - y * sin radianes,
-                    x * sin radianes + y * cos radianes)
-  in [rot (x1, y1), rot (x2, y2), rot (x3, y3), rot (x4, y4)]
+perp :: Vec2 Float -> Vec2 Float
+perp (V2 x y) = V2 (-y) x
 
-dot :: Point -> Point -> Float
-dot (x1, y1) (x2, y2) = x1 * x2 + y1 * y2
+subVec :: Vec2 Float -> Vec2 Float -> Vec2 Float
+subVec = (^-^)
 
 sub :: Point -> Point -> Point
-sub (x1, y1) (x2, y2) = (x1 - x2, y1 - y2)
-
-perp :: Vector -> Vector
-perp (x, y) = (-y, x)
+sub = (^-^)
 
 isInBounds :: Point -> Size -> Bool
-isInBounds (x, y) (width, height) =
-  x >= 0 && x <= width && y >= 0 && y <= height
+isInBounds (V2 x y) (V2 w h) = x >= 0 && x <= w && y >= 0 && y <= h
 
 mul :: Size -> Scale -> Size
-mul (w,h) (sw, sh) = (w * sw, h * sh)
+mul (V2 w h) (V2 sw sh) = V2 (w*sw) (h*sh)
 
+normalize :: Vec2 Float -> Vec2 Float
+normalize (V2 x y)
+  | len == 0  = V2 0 0
+  | otherwise = V2 (x/len) (y/len)
+  where
+    len = sqrt (x*x + y*y)
 
+-- Rota 4 puntos alrededor del origen por un ángulo en grados
+getVertices :: (Point, Point, Point, Point, Angle) -> [Point]
+getVertices (p1, p2, p3, p4, ang) = rot <$> [p1, p2, p3, p4]
+  where
+    t   = deg2rad ang
+    rot (V2 x y) = V2 (x * cos t - y * sin t) (x * sin t + y * cos t)
