@@ -2,7 +2,7 @@ import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
 import Data.Char (toLower)
 
--- Estado del juego
+
 data Mundo = Mundo
   { posX :: Float
   , posY :: Float
@@ -12,14 +12,14 @@ data Mundo = Mundo
   , tiempo :: Float
   } deriving Show
 
--- Constantes físicas
+-- FÍSICAS
 gravedad, impulsoSalto, velocidad, sueloY :: Float
 gravedad = -700
 impulsoSalto = 300
 velocidad = 200
 sueloY = -200
 
--- Estado inicial
+-- ESTADO INICIAL
 estadoInicial :: Mundo
 estadoInicial = Mundo 0 sueloY 0 0 True 0
 
@@ -35,7 +35,7 @@ altoPierna  = 40
 main :: IO ()
 main = play ventana fondo fps estadoInicial dibujar manejarEvento actualizar
   where
-    ventana = InWindow "Muñeco con salto" (800, 600) (100, 100)
+    ventana = InWindow "JUEGO SIMPLE" (800, 600) (100, 100)
     fondo   = white
     fps     = 60
 
@@ -43,7 +43,7 @@ main = play ventana fondo fps estadoInicial dibujar manejarEvento actualizar
 dibujar :: Mundo -> Picture
 dibujar e = Pictures
   [ Translate (posX e) (posY e) $ personaje e
-  , Color black $ Line [(-400, sueloY), (400, sueloY)]       -- suelo
+  , Color black $ Line [(-400, sueloY), (400, sueloY)]       
   , Color black $ Translate (-350) 250 $ Scale 0.1 0.1 $
       Text ("X: " ++ show (round (posX e)) ++
             " | " ++ (if enSuelo e then "Suelo" else "Aire"))
@@ -91,16 +91,16 @@ piernas t vx
   | abs vx < 10 = piernasQuietas
   | otherwise   = piernasAndando
   where
-    balanceo = 12 * sin (t * 8)   -- más suave y natural
-    caderaY  = 0                  -- punto donde nacen las piernas
+    balanceo = 12 * sin (t * 8)   
+    caderaY  = 0                  
 
     piernasAndando = Pictures
-      [ -- Pierna izquierda
+      [--IZQUIERDA
         Translate (-anchoPierna*0.7) caderaY $
           Rotate balanceo $
             Translate 0 (-altoPierna/2) $
               Color blue (rectangleSolid anchoPierna altoPierna)
-        -- Pierna derecha
+        --DERECHA
       , Translate (anchoPierna*0.7) caderaY $
           Rotate (-balanceo) $
             Translate 0 (-altoPierna/2) $
@@ -138,7 +138,7 @@ manejarEvento (EventKey (Char 'w') Down _ _) e
 
 manejarEvento _ e = e
 
--- ACTUALIZACIÓN (física + animación)
+
 actualizar :: Float -> Mundo -> Mundo
 actualizar dt e
   | y' <= sueloY = e { posX = x', posY = sueloY, velY = 0, enSuelo = True, tiempo = tiempo e + dt }

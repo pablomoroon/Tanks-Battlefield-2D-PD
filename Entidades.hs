@@ -8,7 +8,6 @@ module Entidades
 {-# LANGUAGE DeriveFunctor #-}
 import Control.Applicative (liftA2)
 
--- Vec2: Functor y Applicative por componente
 data Vec2 a = V2 { vx :: a, vy :: a }
   deriving (Eq, Show, Functor)
 
