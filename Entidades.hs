@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveFunctor #-}
+
 module Entidades
   ( Vec2(..), (^+^), (^-^), (^*), (*^)
   , Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale
@@ -5,7 +7,7 @@ module Entidades
   , Action(..), GameState(..), BotAction(..)
   ) where
 
-{-# LANGUAGE DeriveFunctor #-}
+
 import Control.Applicative (liftA2)
 
 data Vec2 a = V2 { vx :: a, vy :: a }

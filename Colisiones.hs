@@ -63,6 +63,7 @@ detectRobotRobotCollisions robots =
   [ (objectId r1, objectId r2)
   | (r1:rest) <- tails robots
   , r2 <- rest
+  , objectId r1 < objectId r2  
   , checkCollision r1 r2
   ]
 
