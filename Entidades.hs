@@ -4,6 +4,7 @@ module Entidades
   ( Vec2(..), (^+^), (^-^), (^*), (*^)
   , Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale
   , Objeto(..), RobotData(..), ProyectilData(..), Robot, Proyectil
+  , TipoRobot(..)
   , Action(..), GameState(..), BotAction(..)
   ) where
 
@@ -49,16 +50,20 @@ data Objeto a = Objeto
   , velocity     :: Velocity
   , angulo       :: Angle
   , explosion    :: Bool
+  , explosionTime :: Float
   , size         :: Size
   , imagenObjeto :: String
   , extras       :: a
   } deriving (Show, Eq, Functor)
+
+data TipoRobot = Predeterminado | Agresivo deriving (Show, Eq)
 
 data RobotData = RobotData
   { name   :: String
   , energy :: Float
   , range  :: Distance
   , speed  :: Float
+  , tipo :: TipoRobot
   } deriving (Show, Eq)
 
 data ProyectilData = ProyectilData
