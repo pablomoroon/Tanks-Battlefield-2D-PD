@@ -1,6 +1,6 @@
 module Fisicas
   ( distanceBetween, angleToTarget, deg2rad, rad2deg
-  , subVec, getVertices, dot, sub, perp, isInBounds, mul, normalize
+  , subVec, getVertices, dot, sub, perp, isInBounds, mul, normalize, clamp, clampPosition
   ) where
 
 import Entidades
@@ -51,3 +51,11 @@ getVertices (p1, p2, p3, p4, ang) = rot <$> [p1, p2, p3, p4]
   where
     t   = deg2rad ang
     rot (V2 x y) = V2 (x * cos t - y * sin t) (x * sin t + y * cos t)
+
+clamp :: Float -> Float -> Float -> Float
+clamp lo hi v = max lo (min hi v)
+
+clampPosition :: Size -> Size -> Position -> Position
+clampPosition (V2 w h) (V2 rw rh) (V2 x y) =
+  V2 (clamp (rw/2) (w - rw/2) x)
+     (clamp (rh/2) (h - rh/2) y)
