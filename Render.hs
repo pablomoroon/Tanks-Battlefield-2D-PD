@@ -90,5 +90,4 @@ drawFinJuego mwinner =
      , G.Color (G.makeColorI 255 215 0 255) (G.rectangleWire 600 400)
      , G.Translate (-200) 100 (G.Scale 0.4 0.4 (G.Color G.yellow (G.Text "¡VICTORIA!")))
      , G.Translate (-180)  20 (G.Scale 0.28 0.28 (G.Color G.white  (G.Text texto)))
-     , G.Translate (-220) (-60) (G.Scale 0.18 0.18 (G.Color (G.greyN 0.8) (G.Text "Presiona 'R' para reiniciar")))
      ]
