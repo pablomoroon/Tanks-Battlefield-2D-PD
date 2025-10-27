@@ -83,14 +83,20 @@ drawBullet ws p = let (x,y) = worldToScreen ws (position p)
 
 drawHUDZombies :: Size -> Int -> Float -> Int -> Int -> G.Picture
 drawHUDZombies (V2 w h) tk t humanos zombies =
-  G.Translate (-(w/2) + 10) (h/2 - 30) . G.Scale 0.1 0.1 $
-    G.Pictures
-      [ G.Text ("tick=" ++ show tk ++ "  t=" ++ show (round (t * 100) `div` 100) ++ "s")
-      , G.Translate 0 (-15) $ G.Color (G.makeColorI 0 120 255 255) $
-          G.Text ("Humanos: " ++ show humanos)
-      , G.Translate 0 (-30) $ G.Color (G.makeColorI 0 150 0 255) $
-          G.Text ("Zombies: " ++ show zombies)
-      ]
+  G.Translate (-(w/2) + 10) (h/2 - 30) $
+    G.Scale 0.1 0.1 $
+      G.Pictures
+        [ G.Color G.white $
+            G.Text ("tick=" ++ show tk ++ "  t=" ++ show (round (t * 100) `div` 100) ++ "s")
+        , G.Translate 1500 150 $
+            G.Color (G.makeColorI 0 120 255 255) $
+              G.Text ("Humanos: " ++ show humanos)
+        , G.Translate 3000 150 $
+            G.Color (G.makeColorI 0 180 0 255) $
+              G.Text ("Zombies: " ++ show zombies)
+        ]
+
+
 
 drawFinJuegoZombies :: Maybe TipoRobot -> G.Picture
 drawFinJuegoZombies mganador =
