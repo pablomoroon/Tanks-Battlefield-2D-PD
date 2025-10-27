@@ -1,9 +1,10 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module Main where
 
 import Entidades
-import Fisicas
+import Fisicas hiding (sub)
 import Robot as RB
 import Colisiones
 import Assets (obtenerMapa, escalarMapaAlFondo)
@@ -111,16 +112,19 @@ handleButtonClick btn m =
     BtnMapa         -> Menu m { mapIndex = (mapIndex m + 1) `mod` 3 }
     BtnStart        -> Playing (crearMundoDesdeMenu m)
 
+-- Botones del menu
 detectarBoton :: (Float, Float) -> Maybe MenuOption
 detectarBoton (x, y)
-  | dentro (-200, 60) 70 50 = Just BtnHumanosMinus
-  | dentro (-90, 60)  70 50 = Just BtnHumanosPlus
-  | dentro (90, 60)   70 50 = Just BtnZombiesMinus
-  | dentro (200, 60)  70 50 = Just BtnZombiesPlus
-  | dentro (0, -40)   300 60 = Just BtnMapa
-  | dentro (0, -130)  360 80 = Just BtnStart
+  | dentro (-270, 40) 70 50 = Just BtnHumanosMinus
+  | dentro (-130, 40) 70 50 = Just BtnHumanosPlus
+  | dentro (160, 40) 70 50 = Just BtnZombiesMinus
+  | dentro (300, 40) 70 50 = Just BtnZombiesPlus
+  | dentro (0, -40) 300 60 = Just BtnMapa
+  | dentro (20, -130) 500 80 = Just BtnStart
   | otherwise = Nothing
-  where dentro (cx, cy) w h = abs (x - cx) <= w/2 && abs (y - cy) <= h/2
+  where
+    dentro (cx, cy) w h = abs (x - cx) <= w/2 && abs (y - cy) <= h/2
+
 
 --------------------------------------------------------------------------------
 -- DIBUJO DEL MENÚ CENTRADO
@@ -276,7 +280,7 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
         let ang = deg2rad (angulo rob)
             dir = V2 (cos ang) (sin ang)
         in (RB.updateRobotVelocity rob (velocity rob ^+^ (dir ^* accel)), ds)
-      
+
       SetTarget mId ->
         let ex = extras rob in (rob { extras = ex { memTarget = mId } }, ds)
 
@@ -315,10 +319,10 @@ updateExplosions = filter ((<1.0) . expTime) . map (\e -> e { expTime = expTime 
 separarRobotsEnColision :: [(Int, Int)] -> [Robot] -> [Robot]
 separarRobotsEnColision colisiones robots =
   let robotMap = Map.fromList [(objectId r, r) | r <- robots]
-      
+
       -- Aplicar todas las separaciones
       finalMap = foldl' aplicarSeparacion robotMap colisiones
-      
+
       aplicarSeparacion m (id1, id2) =
         case (Map.lookup id1 m, Map.lookup id2 m) of
           (Just r1, Just r2) ->
@@ -336,7 +340,7 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
         vivos = filter RB.isRobotAlive robots
         humanosVivos = filter (\r -> tipo (extras r) == Humano) vivos
         zombiesVivos = filter (\r -> tipo (extras r) == Zombie) vivos
-        
+
         (nuevoEstado, nuevoTimer, nuevoGanador) =
           if null humanosVivos then
             if endTimer + dt >= 2.5
@@ -410,21 +414,16 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
             robotsDañados = foldl aplicarDañoBala robotsParados colRP
             aplicarDañoBala rs (rid,pid) = case find ((== pid) . objectId) disparosMovidos of
               Nothing -> rs
-              Just p  -> 
+              Just p  ->
                 case find ((== ownerId (extras p)) . objectId) robots of
                   Nothing -> rs
                   Just shooter ->
-                    [ if objectId r == rid
-                      then
-                        if RB.esEnemigo r shooter
-                        then let nuevaEnergia = energy (extras r) - damage (extras p)
-                                 muere = nuevaEnergia <= 0
-                             in r { extras = (extras r) { energy = nuevaEnergia }
-                                  , explosion = explosion r || muere
-                                  , explosionTime = if muere then 0 else explosionTime r
-                                  }
-                        else r
-                      else r
+                    [ (if (objectId r == rid) && RB.esEnemigo r shooter then (let nuevaEnergia = energy (extras r) - damage (extras p)
+                                                                                  muere = nuevaEnergia <= 0
+                                                                              in r { extras = (extras r) { energy = nuevaEnergia }
+                                                                                   , explosion = explosion r || muere
+                                                                                   , explosionTime = if muere then 0 else explosionTime r
+                                                                                   }) else r)
                     | r <- rs ]
 
             shotsRestantes =
@@ -498,18 +497,18 @@ spawnBando n gs seed tipoRobot offsetId =
     rx i = frac (sin (fromIntegral (seed + 97*i + offsetId * 1000)) * 43758.5453123)
     ry :: Int -> Float
     ry i = frac (sin (fromIntegral (seed + 193*i + offsetId * 1000)) * 24634.6345349)
-    
+
     nombreRobot Humano k = "Humano" ++ show (k + 1)
     nombreRobot Zombie k = "Zombie" ++ show (k + 1)
-    
+
     sizeRobot Humano = V2 45 35
     sizeRobot Zombie = V2 60 45
-    
+
     energiaInicial Humano = 200
     energiaInicial Zombie = 250
-    
+
     rangoVision Humano = 400
     rangoVision Zombie = 350
-    
+
     velocidadMovimiento Humano = 65
     velocidadMovimiento Zombie = 75
