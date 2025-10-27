@@ -1,58 +1,62 @@
 module Render
   ( worldToScreen
   , drawRobot, drawExplosion, drawImpactExplosion
-  , drawBullet, drawHUD, drawFinJuego
+  , drawBullet, drawHUDZombies, drawFinJuegoZombies
   ) where
 
 import Entidades
 import qualified Graphics.Gloss as G
-import Text.Printf (printf)
+import Assets (spriteCuerpo, spriteCanion, spriteZombie)
 
 worldToScreen :: Size -> Position -> (Float, Float)
 worldToScreen (V2 w h) (V2 x y) = (x - w/2, y - h/2)
 
-colorTanque :: Robot -> G.Color
-colorTanque r = case tipo (extras r) of
-  Predeterminado -> G.makeColorI 75 83 32 255
-  Agresivo       -> G.makeColorI 180 0 0 255
-
-vidaColor :: Float -> G.Color
-vidaColor v | v > 60 = G.green | v > 30 = G.orange | otherwise = G.red
-
-cuerpoTanque :: G.Color -> (Float,Float) -> G.Picture
-cuerpoTanque c (x,y) = G.Translate x y $ G.Pictures
-  [ G.Color (G.greyN 0.1) (G.rectangleSolid 100 75)
-  , G.Color G.black      (G.rectangleSolid 106 56)
-  , G.Color c            (G.rectangleSolid 100 50)
-  ]
-
-cabeza :: G.Color -> (Float,Float) -> G.Picture
-cabeza c (x,y) = G.Translate x y $ G.Pictures
-  [ G.Color G.black (G.circleSolid 17)
-  , G.Color c       (G.circleSolid 15)
-  ]
-
-canion :: G.Color -> (Float,Float) -> G.Picture
-canion c (x,y) = G.Translate x y $ G.Pictures
-  [ G.Color G.black (G.rectangleSolid 63 8)
-  , G.Color c       (G.rectangleSolid 60 5)
-  ]
-
-barraVida :: (Float,Float) -> Float -> G.Picture
-barraVida (x,y) v = G.Translate x y $ G.Pictures
-  [ G.Color G.black (G.rectangleSolid 103 8)
-  , G.Translate (-(100 - v)/2) 0 (G.Color (vidaColor v) (G.rectangleSolid v 5))
-  ]
-
 drawRobot :: Size -> Robot -> G.Picture
-drawRobot ws r | explosion r = G.Blank
-               | otherwise   =
-  let (x,y) = worldToScreen ws (position r)
-      ang   = angulo r
-      vida  = max 0 (min 100 (energy (extras r)))
-      c     = colorTanque r
-  in G.Translate x y . G.Rotate (-ang) $ G.Pictures
-       [ cuerpoTanque c (0,0), canion c (30,0), cabeza c (-10,0), barraVida (0,50) vida ]
+drawRobot ws r
+  | explosion r = G.Blank
+  | otherwise =
+      let (x, y)     = worldToScreen ws (position r)
+          angCuerpo  = angulo r
+          angCanon   = anguloCanon r
+          
+          (spriteBase, escalaSprite) = case tipo (extras r) of
+            Humano -> (spriteCuerpo, 0.10)
+            Zombie -> (spriteZombie, 0.3)
+          
+          escala2 = 0.05
+          
+          colorTint = G.makeColorI 255 255 255 255
+          
+          vidaActual = energy (extras r)
+          vidaMax = case tipo (extras r) of
+            Humano -> 200  -- ACTUALIZADO de 100 a 200
+            Zombie -> 250  -- ACTUALIZADO de 150 a 250
+          porcentajeVida = vidaActual / vidaMax
+          anchoBarraMax = 40
+          anchoBarraActual = anchoBarraMax * porcentajeVida
+          
+          colorVida
+            | porcentajeVida > 0.6 = G.green
+            | porcentajeVida > 0.3 = G.yellow
+            | otherwise = G.red
+          
+          barraVida = G.Translate 0 25 $ G.Pictures
+            [ G.Color G.black (G.rectangleWire anchoBarraMax 6)
+            , G.Translate (-(anchoBarraMax - anchoBarraActual)/2) 0 
+                (G.Color colorVida (G.rectangleSolid anchoBarraActual 5))
+            ]
+          
+          dibujoCanon = case tipo (extras r) of
+            Humano -> G.Rotate (-(angCanon - 90)) 
+                        (G.Translate 0 0 (G.Scale escala2 escala2 spriteCanion))
+            Zombie -> G.Blank
+          
+      in G.Translate x y $ G.Pictures
+           [ G.Rotate (-angCuerpo) 
+               (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
+           , dibujoCanon
+           , barraVida
+           ]
 
 explosionPicture :: Float -> G.Picture
 explosionPicture t = G.Pictures
@@ -67,7 +71,6 @@ drawExplosion ws r
                   in G.Translate x y (explosionPicture (explosionTime r))
   | otherwise   = G.Blank
 
-
 drawImpactExplosion :: Size -> Position -> Float -> G.Picture
 drawImpactExplosion ws pos t =
   let (x,y) = worldToScreen ws pos
@@ -77,17 +80,30 @@ drawBullet :: Size -> Proyectil -> G.Picture
 drawBullet ws p = let (x,y) = worldToScreen ws (position p)
                   in G.Translate x y (G.Color (G.greyN 0.2) (G.circleSolid 4))
 
-drawHUD :: Size -> Int -> Float -> Int -> G.Picture
-drawHUD (V2 w h) tk t n =
+drawHUDZombies :: Size -> Int -> Float -> Int -> Int -> G.Picture
+drawHUDZombies (V2 w h) tk t humanos zombies =
   G.Translate (-(w/2) + 10) (h/2 - 30) . G.Scale 0.1 0.1 $
-    G.Text (printf "tick=%d  t=%.2fs  vivos=%d" tk t n)
+    G.Pictures
+      [ G.Text ("tick=" ++ show tk ++ "  t=" ++ show (round (t * 100) `div` 100) ++ "s")
+      , G.Translate 0 (-15) $ G.Color (G.makeColorI 0 120 255 255) $ 
+          G.Text ("Humanos: " ++ show humanos)
+      , G.Translate 0 (-30) $ G.Color (G.makeColorI 0 150 0 255) $ 
+          G.Text ("Zombies: " ++ show zombies)
+      ]
 
-drawFinJuego :: Maybe Int -> G.Picture
-drawFinJuego mwinner =
-  let texto = maybe "Sin ganador" (\i -> "Ganador: Tanque " ++ show i) mwinner
+drawFinJuegoZombies :: Maybe TipoRobot -> G.Picture
+drawFinJuegoZombies mganador =
+  let texto = case mganador of
+        Just Humano -> "¡LOS HUMANOS SOBREVIVIERON!"
+        Just Zombie -> "¡LOS ZOMBIES GANARON!"
+        Nothing -> "EMPATE"
+      color = case mganador of
+        Just Humano -> G.makeColorI 0 120 255 255
+        Just Zombie -> G.makeColorI 0 150 0 255
+        Nothing -> G.white
   in G.Pictures
-     [ G.Color (G.makeColorI 0 0 0 180) (G.rectangleSolid 600 400)
-     , G.Color (G.makeColorI 255 215 0 255) (G.rectangleWire 600 400)
-     , G.Translate (-200) 100 (G.Scale 0.4 0.4 (G.Color G.yellow (G.Text "¡VICTORIA!")))
-     , G.Translate (-180)  20 (G.Scale 0.28 0.28 (G.Color G.white  (G.Text texto)))
+     [ G.Color (G.makeColorI 0 0 0 180) (G.rectangleSolid 700 400)
+     , G.Color (G.makeColorI 255 215 0 255) (G.rectangleWire 700 400)
+     , G.Translate (-250) 100 (G.Scale 0.4 0.4 (G.Color G.yellow (G.Text "¡FIN DEL JUEGO!")))
+     , G.Translate (-300)  20 (G.Scale 0.28 0.28 (G.Color color (G.Text texto)))
      ]

@@ -25,6 +25,7 @@ objectVertices obj = (^+^ V2 x y) <$> rotated
     hw  = w / 2
     hh  = h / 2
     base = [ V2 (-hw) (-hh), V2 hw (-hh), V2 hw hh, V2 (-hw) hh ]
+    -- Usar el ángulo del cuerpo para las colisiones
     rotated = getVertices (base !! 0, base !! 1, base !! 2, base !! 3, angulo obj)
 
 axes :: [Point] -> [Vector]

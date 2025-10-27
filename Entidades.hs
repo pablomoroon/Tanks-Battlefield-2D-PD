@@ -43,20 +43,21 @@ type Velocity = Vec2 Float
 type Size     = Vec2 Float
 type Scale    = Vec2 Float
 
--- Objeto genérico con 'extras' mapeable
 data Objeto a = Objeto
-  { objectId     :: Int
-  , position     :: Position
-  , velocity     :: Velocity
-  , angulo       :: Angle
-  , explosion    :: Bool
+  { objectId      :: Int
+  , position      :: Position
+  , velocity      :: Velocity
+  , angulo        :: Angle
+  , anguloCanon   :: Angle
+  , explosion     :: Bool
   , explosionTime :: Float
-  , size         :: Size
-  , imagenObjeto :: String
-  , extras       :: a
+  , size          :: Size
+  , imagenObjeto  :: String
+  , extras        :: a
   } deriving (Show, Eq, Functor)
 
-data TipoRobot = Predeterminado | Agresivo deriving (Show, Eq)
+-- MODIFICADO: Ahora solo Humano y Zombie
+data TipoRobot = Humano | Zombie deriving (Show, Eq)
 
 data RobotData = RobotData
   { name   :: String
@@ -64,6 +65,10 @@ data RobotData = RobotData
   , range  :: Distance
   , speed  :: Float
   , tipo :: TipoRobot
+  , memTarget :: Maybe Int        -- Id del objetivo asignado (si existe)
+  , memRole   :: Maybe String     -- Rol táctico: "leader", "flank", "chase", etc.
+  , memLastSeen :: Maybe Position -- Última posición vista del objetivo
+  , memAggroCooldown :: Int       -- Cooldown para re-asignar/agitar agresividad
   } deriving (Show, Eq)
 
 data ProyectilData = ProyectilData
@@ -89,8 +94,13 @@ data GameState = GameState
 data BotAction
     = Move Position
     | Rotate Angle
+    | RotateCannon Angle
     | Accelerate Float
     | Shoot
     | Stop
+  | SetTarget (Maybe Int)        -- Guardar/limpiar objetivo en la memoria del robot
+  | SetRole (Maybe String)       -- Asignar un rol táctico
+  | UpdateLastSeen Position      -- Actualizar última posición vista del objetivo
+  | SetAggroCooldown Int         -- Establecer cooldown/agresividad
     | Combo [BotAction]
   deriving (Show, Eq)

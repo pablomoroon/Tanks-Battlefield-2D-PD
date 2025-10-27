@@ -45,7 +45,6 @@ normalize (V2 x y)
   where
     len = sqrt (x*x + y*y)
 
--- Rota 4 puntos alrededor del origen por un ángulo en grados
 getVertices :: (Point, Point, Point, Point, Angle) -> [Point]
 getVertices (p1, p2, p3, p4, ang) = rot <$> [p1, p2, p3, p4]
   where
@@ -55,7 +54,40 @@ getVertices (p1, p2, p3, p4, ang) = rot <$> [p1, p2, p3, p4]
 clamp :: Float -> Float -> Float -> Float
 clamp lo hi v = max lo (min hi v)
 
-clampPosition :: Size -> Size -> Position -> Position
-clampPosition (V2 w h) (V2 rw rh) (V2 x y) =
-  V2 (clamp (rw/2) (w - rw/2) x)
-     (clamp (rh/2) (h - rh/2) y)
+clampPosition :: Size -> Size -> Position -> Angle -> Position
+clampPosition (V2 w h) (V2 rw rh) pos ang =
+  let
+    halfW = w 
+    halfH = h 
+    hw = rw / 2
+    hh = rh / 2
+    rad = deg2rad ang
+
+    rot (V2 x y) = V2 (x * cos rad - y * sin rad)
+                      (x * sin rad + y * cos rad)
+    esquinas = map (^+^ pos)
+      [ rot (V2 (-hw) (-hh))
+      , rot (V2 hw (-hh))
+      , rot (V2 hw hh)
+      , rot (V2 (-hw) hh)
+      ]
+
+    xs = map (\(V2 x _) -> x) esquinas
+    ys = map (\(V2 _ y) -> y) esquinas
+
+    minX = -halfW
+    maxX =  halfW
+    minY = -halfH
+    maxY =  halfH
+
+    dx
+      | minimum xs < minX = minX - minimum xs
+      | maximum xs > maxX = maxX - maximum xs
+      | otherwise          = 0
+
+    dy
+      | minimum ys < minY = minY - minimum ys
+      | maximum ys > maxY = maxY - maximum ys
+      | otherwise          = 0
+  in
+    pos ^+^ V2 dx dy
