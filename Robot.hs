@@ -1,39 +1,25 @@
 module Robot
-  ( detectedAgent, isRobotAlive, countActiveRobots
-  , updateRobotVelocity, updateVelocity, updatePosition, botDecision
-  , hasLineOfSight, esEnemigo, robotsCercanos, aliadosCercanos
+  ( isRobotAlive
+  , updateRobotVelocity, updatePosition, botDecision
+  , esEnemigo, robotsCercanos, aliadosCercanos
   ) where
 
 import Entidades
 import Fisicas
 import Control.Applicative (liftA2)
 
-detectedAgent :: Robot -> Robot -> Bool
-detectedAgent r1 r2 = distanceBetween (position r1) (position r2) <= range (extras r1)
-
 isRobotAlive :: Robot -> Bool
 isRobotAlive r = energy (extras r) > 0
 
-countActiveRobots :: [Robot] -> Int
-countActiveRobots = length . filter isRobotAlive
-
 updateRobotVelocity :: Robot -> Velocity -> Robot
 updateRobotVelocity r v = r { velocity = v }
-
-updateVelocity :: Action -> Robot -> Robot
-updateVelocity (Action stop dir a _shoot) r
-  | stop      = r { velocity = pure 0 }
-  | otherwise = r { velocity = velocity r ^+^ (dir ^* a) }
 
 updatePosition :: Robot -> Tiempo -> Robot
 updatePosition r dt = 
   let newPos = position r ^+^ (velocity r ^* dt)
   in r { position = newPos }
 
-hasLineOfSight :: Position -> Position -> [Robot] -> Bool
-hasLineOfSight p1 p2 obstacles = True
-
--- NUEVO: Verificar si dos robots son enemigos
+-- Verificar si dos robots son enemigos
 esEnemigo :: Robot -> Robot -> Bool
 esEnemigo r1 r2 = tipo (extras r1) /= tipo (extras r2)
 
@@ -49,8 +35,7 @@ smoothRotateTowards current target speed =
       | otherwise = a
     clamp lo hi v = max lo (min hi v)
 
--- MODIFICADO: Filtrar solo enemigos (diferente tipo)
--- Detecta robots cercanos, tanto enemigos como aliados
+-- Detecta robots cercanos (todos)
 robotsCercanos :: Robot -> [Robot] -> [Robot]
 robotsCercanos self todos =
   let rango = range (extras self)
@@ -160,7 +145,7 @@ estrategiaHumano tick gs r enemigosRadar =
                   else let sumPos = foldl (\acc a -> acc ^+^ position a) pR aliados
                        in (1 / fromIntegral (length aliados + 1)) *^ sumPos
     
-    -- LÓGICA 1: SISTEMA DE ROLES TÁCTICOS DINÁMICO
+    -- SISTEMA DE ROLES TÁCTICOS DINÁMICO
     miId = objectId r
     esLider = miId == minimum (miId : map objectId aliados)
     
@@ -362,7 +347,6 @@ estrategiaZombie tick gs r enemigosRadar =
     currentAngle = angulo r
     vida = energy (extras r)
     
-    -- MEMORIA SIMPLE: Solo recordar último objetivo visto
     memLast = memLastSeen (extras r)
     memCooldown = memAggroCooldown (extras r)
     
@@ -373,25 +357,19 @@ estrategiaZombie tick gs r enemigosRadar =
     
   in case seleccionarObjetivoPrioritario r enemigosRadar of
     Nothing ->
-      -- SIN ENEMIGOS: Explorar o investigar última posición
       let 
           nuevoCooldown = max 0 (memCooldown - 1)
-          
-          -- Si tenemos memoria reciente, ir a investigar
           debeInvestigar = nuevoCooldown > 30 && memLast /= Nothing
           
           destinoBase = case memLast of
-            Just lastPos | debeInvestigar && distanceBetween pR lastPos > 50 -> 
-              lastPos  -- Ir a donde vimos al humano
+            Just lastPos | debeInvestigar && distanceBetween pR lastPos > 50 -> lastPos
             _ -> 
-              -- Patrullar en círculos
               let angulo = fromIntegral (tick + objectId r * 100) * 0.01
                   radio = min wx wy * 0.35
               in centro ^+^ V2 (cos angulo * radio) (sin angulo * radio)
           
           destinoFinal = if cercaBorde then centro else destinoBase
           
-          -- Evitar aliados cercanos
           fuerzaRepulsion = foldl (\acc a -> 
             let dist = distanceBetween pR (position a)
                 dir = normalize (pR ^-^ position a)
@@ -405,7 +383,6 @@ estrategiaZombie tick gs r enemigosRadar =
           targetAngle = rad2deg (angleToTarget pR destinoConRepulsion)
           newAngle = smoothRotateTowards currentAngle targetAngle velocidadRotacion
           
-          -- Limpiar memoria si cooldown llegó a 0
           accionesMemoria = if nuevoCooldown == 0
                            then [SetTarget Nothing, SetAggroCooldown 0]
                            else [SetAggroCooldown nuevoCooldown]
@@ -413,23 +390,19 @@ estrategiaZombie tick gs r enemigosRadar =
       in accionesMemoria ++ [Rotate (deg2rad newAngle), Move destinoConRepulsion]
     
     Just humano ->
-      -- CON ENEMIGO: Perseguir agresivamente
       let
         pH = position humano
         idH = objectId humano
         dist = distanceBetween pR pH
         
-        -- GUARDAR EN MEMORIA: Objetivo y última posición vista
         accionesMemoria = 
           [ SetTarget (Just idH)
           , UpdateLastSeen pH
-          , SetAggroCooldown 120  -- Recordar durante 2 segundos (120 ticks)
+          , SetAggroCooldown 120
           ]
         
-        -- Dirección hacia el humano
         dir = normalize (pH ^-^ pR)
         
-        -- Evitar aliados mientras persiguen
         fuerzaRepulsion = foldl (\acc a -> 
           let dist' = distanceBetween pR (position a)
               dir' = normalize (pR ^-^ position a)
@@ -438,14 +411,13 @@ estrategiaZombie tick gs r enemigosRadar =
              else acc
           ) (pure 0) aliados
         
-        -- Zombies atacan muy de cerca
         distanciaAtaque = 60
         
         destino = if cercaBorde 
                  then centro
                  else if dist > distanciaAtaque 
-                      then pH  -- Perseguir directamente
-                      else pR ^+^ (dir ^* 25)  -- Mantener presión
+                      then pH
+                      else pR ^+^ (dir ^* 25)
         
         destinoFinal = destino ^+^ (fuerzaRepulsion ^* 0.4)
         
