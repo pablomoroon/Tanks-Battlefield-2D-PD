@@ -2,6 +2,7 @@ module Robot
   ( isRobotAlive
   , updateRobotVelocity, updatePosition, botDecision
   , esEnemigo, robotsCercanos, aliadosCercanos
+  , separarRobots
   ) where
 
 import Entidades
@@ -18,6 +19,30 @@ updatePosition :: Robot -> Tiempo -> Robot
 updatePosition r dt = 
   let newPos = position r ^+^ (velocity r ^* dt)
   in r { position = newPos }
+
+-- Separar dos robots que están en colisión
+separarRobots :: Robot -> Robot -> (Robot, Robot)
+separarRobots r1 r2 =
+  let p1 = position r1
+      p2 = position r2
+      delta = p1 ^-^ p2
+      dist = sqrt (vx delta * vx delta + vy delta * vy delta)
+      
+      -- Distancia mínima basada en los tamaños
+      V2 w1 h1 = size r1
+      V2 w2 h2 = size r2
+      minDist = max w1 w2 * 0.7 + 5  -- Radio + margen
+      
+      overlap = minDist - dist
+  in if overlap > 0 && dist > 0.1
+     then
+       let direction = normalize delta
+           -- Empujar cada robot la mitad de la distancia de overlap
+           pushDist = (overlap / 2) + 2
+           newPos1 = p1 ^+^ (direction ^* pushDist)
+           newPos2 = p2 ^-^ (direction ^* pushDist)
+       in (r1 { position = newPos1 }, r2 { position = newPos2 })
+     else (r1, r2)
 
 -- Verificar si dos robots son enemigos
 esEnemigo :: Robot -> Robot -> Bool
