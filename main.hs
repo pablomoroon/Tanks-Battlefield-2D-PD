@@ -11,7 +11,8 @@ import Render (drawRobot, drawExplosion, drawImpactExplosion, drawBullet, drawHU
 
 import qualified Graphics.Gloss as G
 import qualified Graphics.Gloss.Interface.Pure.Game as GG
-import Data.List (find)
+import Data.List (find, foldl')
+import qualified Data.Map.Strict as Map
 
 --------------------------------------------------------------------------------
 -- ESTADOS PRINCIPALES
@@ -156,34 +157,22 @@ drawMenu MenuState{..} =
           ]
   in
   G.Pictures
-    [ -- Fondo general
-      G.Color (G.makeColorI 10 10 25 255) (G.rectangleSolid 1280 800)
-      -- Panel centrado
+    [ G.Color (G.makeColorI 10 10 25 255) (G.rectangleSolid 1280 800)
     , G.Color baseColor (G.rectangleSolid panelW panelH)
     , G.Color (G.withAlpha 0.6 G.white) (G.rectangleWire panelW panelH)
-
-      -- Título
     , titulo
     , sub
-
-    -- Sección humanos
     , G.Translate (-260) 80 $ G.Scale 0.25 0.25 $
         G.Color (G.makeColorI 80 160 255 255) (G.Text "Humanos")
     , boton "-" (-270, 40) 70 50 (G.makeColorI 70 150 255 255)
     , G.Translate (-200) 40 $ G.Scale 0.3 0.3 (G.Color G.white (G.Text (show numHumanos)))
     , boton "+" (-130, 40) 70 50 (G.makeColorI 70 150 255 255)
-
-    -- Sección zombies
     , G.Translate (170) 80 $ G.Scale 0.25 0.25 $
         G.Color (G.makeColorI 100 255 100 255) (G.Text "Zombies")
     , boton "-" (160, 40) 70 50 (G.makeColorI 100 255 100 255)
     , G.Translate (230) 40 $ G.Scale 0.3 0.3 (G.Color G.white (G.Text (show numZombies)))
     , boton "+" (300, 40) 70 50 (G.makeColorI 100 255 100 255)
-
-      -- Botón mapa
     , boton ("Mapa: " ++ nombreMapa mapIndex) (0, -40) 300 60 (G.makeColorI 160 120 255 255)
-
-      -- Botón comenzar
     , boton "COMENZAR PARTIDA" (20, -130) 500 80 (G.makeColorI 255 100 80 255)
     ]
 
@@ -241,19 +230,18 @@ mkRobot rid nm tipoR pos ang sz energia rango vel =
     , explosionTime = 0
     , size          = sz
     , imagenObjeto  = nm
-  , extras        = RobotData
-    { name   = nm
-    , energy = energia
-    , range  = rango
-    , speed  = vel
-    , tipo   = tipoR
-    , memTarget = Nothing
-    , memRole = Nothing
-    , memLastSeen = Nothing
-    , memAggroCooldown = 0
+    , extras        = RobotData
+      { name   = nm
+      , energy = energia
+      , range  = rango
+      , speed  = vel
+      , tipo   = tipoR
+      , memTarget = Nothing
+      , memRole = Nothing
+      , memLastSeen = Nothing
+      , memAggroCooldown = 0
+      }
     }
-    }
-
 
 mkProjectile :: Int -> Position -> Vector -> Float -> Int -> Proyectil
 mkProjectile pid pos vel dmg owner =
@@ -313,7 +301,7 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
                 (objectId rob * 100000 + length ds)
                 posCanon
                 velBala
-                12  -- REDUCIDO de 20 a 12
+                12
                 (objectId rob)
           in (rob, ds ++ [newShot])
         else (rob, ds)
@@ -322,6 +310,23 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
 
 updateExplosions :: [Explosion] -> [Explosion]
 updateExplosions = filter ((<1.0) . expTime) . map (\e -> e { expTime = expTime e + 0.05 })
+
+-- NUEVA FUNCIÓN: Separar robots que colisionan
+separarRobotsEnColision :: [(Int, Int)] -> [Robot] -> [Robot]
+separarRobotsEnColision colisiones robots =
+  let robotMap = Map.fromList [(objectId r, r) | r <- robots]
+      
+      -- Aplicar todas las separaciones
+      finalMap = foldl' aplicarSeparacion robotMap colisiones
+      
+      aplicarSeparacion m (id1, id2) =
+        case (Map.lookup id1 m, Map.lookup id2 m) of
+          (Just r1, Just r2) ->
+            let (r1', r2') = RB.separarRobots r1 r2
+            in Map.insert id1 r1' $ Map.insert id2 r2' m
+          _ -> m
+  in
+  Map.elems finalMap
 
 stepWorld :: Tiempo -> World -> World
 stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTimer, ganador, mapaActual}
@@ -352,8 +357,6 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
             }
         else
           let
-            updateShots = map (\p -> p { position = position p ^+^ velocity p ^* dt })
-            
             decisiones = [ (r, RB.botDecision tick gs r (filter ((/= objectId r) . objectId) vivos))
                          | r <- vivos ]
             (robotsAccionados, nuevosDisparos) =
@@ -368,7 +371,7 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
 
             (colRR, colRP) = checkCollisions robotsMovidos disparosMovidos
 
-            dañoPorColisionZombie = 8  -- REDUCIDO de 15 a 8
+            dañoPorColisionZombie = 8
             robotsConDañoColision = foldl aplicarDañoColision robotsMovidos colRR
             aplicarDañoColision rs (rid1, rid2) =
               let r1 = find ((== rid1) . objectId) rs
@@ -388,10 +391,13 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
                   else rs
                 _ -> rs
 
+            -- NUEVO: Separar físicamente los robots que colisionan
+            robotsSeparados = separarRobotsEnColision colRR robotsConDañoColision
+
             idsParados = concatMap (\(a,b) -> [a,b]) colRR
             robotsParados =
               [ if objectId r `elem` idsParados then RB.updateRobotVelocity r (pure 0) else r
-              | r <- robotsConDañoColision
+              | r <- robotsSeparados
               ]
 
             nuevasExplosiones =
@@ -499,8 +505,8 @@ spawnBando n gs seed tipoRobot offsetId =
     sizeRobot Humano = V2 45 35
     sizeRobot Zombie = V2 60 45
     
-    energiaInicial Humano = 200  -- AUMENTADO de 100 a 200
-    energiaInicial Zombie = 250  -- AUMENTADO de 150 a 250
+    energiaInicial Humano = 200
+    energiaInicial Zombie = 250
     
     rangoVision Humano = 400
     rangoVision Zombie = 350
