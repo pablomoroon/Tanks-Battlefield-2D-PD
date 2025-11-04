@@ -7,12 +7,14 @@ import Entidades
 import Fisicas hiding (sub)
 import Robot as RB
 import Colisiones
-import Assets (obtenerMapa, escalarMapaAlFondo)
-import Render (drawRobot, drawExplosion, drawImpactExplosion, drawBullet, drawHUDZombies, drawFinJuegoZombies)
+import Assets (obtenerMapa, escalarMapaAlFondo,
+               spriteObsBloqueante, spriteDanino, spritesBomber,tamSpriteExplosivo,
+               tamSpriteDanino,tamSpriteBloqueante)
+import Render (drawRobot, drawExplosion, drawImpactExplosion, drawBullet, drawHUDZombies, drawFinJuegoZombies, worldToScreen)
 
 import qualified Graphics.Gloss as G
 import qualified Graphics.Gloss.Interface.Pure.Game as GG
-import Data.List (find, foldl')
+import Data.List (find, foldl', partition)
 import qualified Data.Map.Strict as Map
 
 --------------------------------------------------------------------------------
@@ -46,6 +48,7 @@ data World = World
   , robots     :: [Robot]
   , shots      :: [Proyectil]
   , explosions :: [Explosion]
+  , obstaculos :: [Obstaculo]  -- NUEVO
   , tick       :: Int
   , elapsed    :: Tiempo
   , estado     :: EstadoJuego
@@ -55,8 +58,9 @@ data World = World
   } deriving (Show, Eq)
 
 data Explosion = Explosion
-  { expPos  :: Position
-  , expTime :: Float
+  { expPos   :: Position
+  , expTime  :: Float
+  , expScale :: Float  -- Escala de la explosión (1.0 normal, >1.0 más grande)
   } deriving (Show, Eq)
 
 --------------------------------------------------------------------------------
@@ -129,6 +133,31 @@ detectarBoton (x, y)
 --------------------------------------------------------------------------------
 -- DIBUJO DEL MENÚ CENTRADO
 --------------------------------------------------------------------------------
+drawWorld :: World -> G.Picture
+drawWorld w
+  | estado w == FinJuego =
+      G.Pictures (fondo : dibObstaculos ++ dibRobots ++ dibExplosiones ++ [mensajeFinal])
+  | otherwise =
+      G.Pictures (fondo : dibObstaculos ++ dibRobots ++ dibBalas ++ dibExplosiones ++ [hud])
+  where
+    V2 wv hv = worldSize (gs w)
+    fondo = escalarMapaAlFondo wv hv (obtenerMapa (mapaActual w))
+
+    dibObstaculos = map (drawObstaculo (worldSize (gs w))) (obstaculos w)  -- NUEVO
+    dibRobots = map (drawRobot (worldSize (gs w))) (robots w)
+    dibBalas = map (drawBullet (worldSize (gs w))) (shots w)
+    dibExplosiones =
+      map (drawExplosion (worldSize (gs w))) (robots w)
+      ++ [ drawImpactExplosion (worldSize (gs w)) (expPos e) (expTime e) (expScale e)
+         | e <- explosions w
+         ]
+
+    humanosVivos = length $ filter (\r -> RB.isRobotAlive r && tipo (extras r) == Humano) (robots w)
+    zombiesVivos = length $ filter (\r -> RB.isRobotAlive r && tipo (extras r) == Zombie) (robots w)
+
+    hud = drawHUDZombies (worldSize (gs w)) (tick w) (elapsed w) humanosVivos zombiesVivos
+
+    mensajeFinal = drawFinJuegoZombies (ganador w)
 
 drawApp :: AppState -> G.Picture
 drawApp (Menu m)    = drawMenu m
@@ -208,12 +237,14 @@ crearMundoDesdeMenu MenuState{..} =
     seed = gameSeed * 97 + mapIndex * 17
     humanos = spawnBando numHumanos gs0 seed Humano 0
     zombies = spawnBando numZombies gs0 (seed + 999) Zombie numHumanos
+    obstaculosGenerados = generarObstaculos seed worldW worldH
   in
   World
     { gs = gs0
     , robots = humanos ++ zombies
     , shots = []
     , explosions = []
+    , obstaculos = obstaculosGenerados  -- NUEVO
     , tick = 0
     , elapsed = 0
     , estado = Jugando
@@ -327,13 +358,60 @@ separarRobotsEnColision colisiones robots =
         case (Map.lookup id1 m, Map.lookup id2 m) of
           (Just r1, Just r2) ->
             let (r1', r2') = RB.separarRobots r1 r2
-            in Map.insert id1 r1' $ Map.insert id2 r2' m
+                -- Cambiar dirección de movimiento al chocar (invertir velocidad)
+                delta = position r1 ^-^ position r2
+                norm = sqrt (vx delta * vx delta + vy delta * vy delta)
+                dir1 = if norm > 0 then delta ^* (1 / norm) else V2 1 0
+                dir2 = dir1 ^* (-1)
+                speed = 80  -- Velocidad directa
+                r1'' = r1' { velocity = dir1 ^* speed }
+                r2'' = r2' { velocity = dir2 ^* speed }
+            in Map.insert id1 r1'' $ Map.insert id2 r2'' m
           _ -> m
   in
   Map.elems finalMap
 
+-- NUEVA FUNCIÓN: Separar robots y redirigir su movimiento al chocar con obstáculos
+separarRobotsDeObstaculos :: [(Int, Int)] -> [Robot] -> [Obstaculo] -> [Robot]
+separarRobotsDeObstaculos colisiones robots obstaculos =
+  let robotMap = Map.fromList [(objectId r, r) | r <- robots]
+
+      finalMap = foldl' aplicarSeparacion robotMap colisiones
+
+      aplicarSeparacion m (rid, oid) =
+        case (Map.lookup rid m, find ((== oid) . objectId) obstaculos) of
+          (Just robot, Just obs) ->
+            let pR = position robot
+                pO = position obs
+                delta = pR ^-^ pO
+
+                V2 wr hr = size robot
+                V2 wo ho = size obs
+
+                -- ✅ Colisión AABB (rectángulos), no círculos
+                overlapX = (wr/2 + wo/2) - abs (vx delta)
+                overlapY = (hr/2 + ho/2) - abs (vy delta)
+
+            in if overlapX > 0 && overlapY > 0 then
+                 -- Elegimos el eje de menor penetración (qué lado empujar)
+                 let empuje
+                        | overlapX < overlapY =
+                            V2 (signum (vx delta) * overlapX) 0
+                        | otherwise =
+                            V2 0 (signum (vy delta) * overlapY)
+
+                     newPos = pR ^+^ empuje
+                     nuevaVel = velocity robot ^* 0.65  -- efecto "resbalar"
+
+                 in Map.insert rid (robot { position = newPos, velocity = nuevaVel }) m
+               else m
+
+          _ -> m
+
+  in Map.elems finalMap
+
 stepWorld :: Tiempo -> World -> World
-stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTimer, ganador, mapaActual}
+stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTimer, ganador, obstaculos}
   | estado == FinJuego = w
   | otherwise =
       let
@@ -351,22 +429,95 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
             then (FinJuego, endTimer + dt, Just Humano)
             else (Jugando, endTimer + dt, Just Humano)
           else (Jugando, 0, Nothing)
+
       in
         if nuevoEstado == FinJuego then
           w { estado = FinJuego
             , ganador = nuevoGanador
-            , robots = robots
             , shots = []
+            , robots = robots
             , explosions = updateExplosions explosions
-            }
+          }
+
         else
           let
-            decisiones = [ (r, RB.botDecision tick gs r (filter ((/= objectId r) . objectId) vivos))
-                         | r <- vivos ]
+            ------------------------------------------------------------------
+            -- BOMBERMAN: Activación solo si lo toca un robot
+            ------------------------------------------------------------------
+            activarBombermanPorContacto :: [Obstaculo] -> [(Int, Int)] -> [Obstaculo]
+            activarBombermanPorContacto obst colRO =
+              [ case tipoObs (extras o) of
+                  Explosivo ->
+                    if any ((== objectId o) . snd) colRO && not (activado (extras o))
+                    then o { extras = (extras o) { activado = True, tiempoVida = 2 }}
+                    else o
+                  _ -> o
+              | o <- obst
+              ]
+
+            colRO = detectRobotObstaculoCollisions robots obstaculos
+            obstaculosActivados = activarBombermanPorContacto obstaculos colRO
+
+            ------------------------------------------------------------------
+            -- Cuenta atrás + animación lenta con animTimer
+            ------------------------------------------------------------------
+            obstaculosActualizados =
+              [ case tipoObs (extras o) of
+                  Explosivo | activado (extras o) && not (exploto (extras o)) ->
+                    let ex = extras o
+                        tiempoNuevo     = tiempoVida ex - dt
+                        animTimerNuevo  = animTimer ex + dt
+
+                        (frameNuevo, timerFinal) =
+                          if animTimerNuevo >= 0.12
+                          then ((animFrame ex + 1) `mod` 4, animTimerNuevo - 0.12)
+                          else (animFrame ex, animTimerNuevo)
+
+                        exFinal = ex
+                          { tiempoVida = tiempoNuevo
+                          , animFrame  = frameNuevo
+                          , animTimer  = timerFinal
+                          }
+                    in o { extras = exFinal }
+
+                  _ -> o
+              | o <- obstaculosActivados
+              ]
+
+            ------------------------------------------------------------------
+            -- Si el tiempo llega a 0 → Explota
+            ------------------------------------------------------------------
+            (obstaculosExplosivos, obstaculosNormales) =
+              partition
+                (\o -> tipoObs (extras o) == Explosivo
+                       && activado (extras o)
+                       && not (exploto (extras o))
+                       && tiempoVida (extras o) <= 0)
+                obstaculosActualizados
+
+            nuevasExplosionesObstaculos =
+              [ Explosion (position o) 0 3.5 | o <- obstaculosExplosivos ]
+
+            obstaculosFinales =
+              [ if objectId o `elem` map objectId obstaculosExplosivos
+                then o { extras = (extras o) { exploto = True } }
+                else o
+              | o <- obstaculosNormales
+              ]
+
+            ------------------------------------------------------------------
+            -- Resto del juego (NO TOCAR)
+            ------------------------------------------------------------------
+            decisiones =
+              [ (r, RB.botDecision tick gs obstaculosFinales r (filter ((/= objectId r) . objectId) vivos))
+              | r <- vivos
+              ]
+
             (robotsAccionados, nuevosDisparos) =
               unzip [ applyBotActions gs vivos r a | (r,a) <- decisiones ]
 
-            robotsMovidos = map (clampRobot (worldSize gs) . (`RB.updatePosition` dt)) robotsAccionados
+            robotsMovidos =
+              map (clampRobot (worldSize gs) . (`RB.updatePosition` dt)) robotsAccionados
 
             disparosMovidos =
               [ p { position = position p ^+^ velocity p ^* dt }
@@ -374,62 +525,85 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               ]
 
             (colRR, colRP) = checkCollisions robotsMovidos disparosMovidos
+            colPO = detectProyectilObstaculoCollisions disparosMovidos obstaculosFinales
 
-            dañoPorColisionZombie = 8
             robotsConDañoColision = foldl aplicarDañoColision robotsMovidos colRR
             aplicarDañoColision rs (rid1, rid2) =
-              let r1 = find ((== rid1) . objectId) rs
-                  r2 = find ((== rid2) . objectId) rs
-              in case (r1, r2) of
-                (Just robot1, Just robot2) ->
-                  if RB.esEnemigo robot1 robot2 then
-                    [ if objectId r == rid1 || objectId r == rid2
-                      then let nuevaEnergia = energy (extras r) - dañoPorColisionZombie
-                               muere = nuevaEnergia <= 0
-                           in r { extras = (extras r) { energy = nuevaEnergia }
-                                , explosion = explosion r || muere
-                                , explosionTime = if muere then 0 else explosionTime r
-                                }
-                      else r
-                    | r <- rs ]
-                  else rs
+              case (find ((== rid1) . objectId) rs, find ((== rid2) . objectId) rs) of
+                (Just r1, Just r2) | RB.esEnemigo r1 r2 ->
+                  [ if objectId r == rid1 || objectId r == rid2
+                    then r { extras = (extras r) { energy = energy (extras r) - 12 }
+                           , explosion = energy (extras r) <= 12
+                           , explosionTime = if energy (extras r) <= 12 then 0 else explosionTime r }
+                    else r | r <- rs ]
                 _ -> rs
 
-            -- NUEVO: Separar físicamente los robots que colisionan
-            robotsSeparados = separarRobotsEnColision colRR robotsConDañoColision
+            robotsSeparadosDeObstaculos =
+              separarRobotsDeObstaculos colRO robotsConDañoColision obstaculosFinales
+
+            robotsSeparados =
+              separarRobotsEnColision colRR robotsSeparadosDeObstaculos
+
+            ------------------------------------------------------------------
+            -- Explosión de obstáculo aplica daño radial
+            ------------------------------------------------------------------
+            robotsConExplosiones =
+              foldl aplicarDañoExplosion robotsSeparados obstaculosExplosivos
+            aplicarDañoExplosion rs obs =
+              let radio = radioExplosion (extras obs)
+                  dano  = dañoObs (extras obs)
+              in [ let dist = distanceBetween (position r) (position obs)
+                       factor = max 0 (1 - dist / radio)
+                       danoFinal = dano * factor
+                   in if dist <= radio && danoFinal > 0
+                      then r { extras = (extras r) { energy = energy (extras r) - danoFinal }
+                             , explosion = energy (extras r) - danoFinal <= 0
+                             , explosionTime = if energy (extras r) - danoFinal <= 0 then 0 else explosionTime r }
+                      else r
+                 | r <- rs ]
 
             idsParados = concatMap (\(a,b) -> [a,b]) colRR
             robotsParados =
               [ if objectId r `elem` idsParados then RB.updateRobotVelocity r (pure 0) else r
-              | r <- robotsSeparados
+              | r <- robotsConExplosiones
               ]
 
             nuevasExplosiones =
-              [ Explosion (position p) 0
+              [ Explosion (position p) 0 1.0
               | (_, pid) <- colRP
               , p <- disparosMovidos
               , objectId p == pid
               ]
 
-            robotsDañados = foldl aplicarDañoBala robotsParados colRP
-            aplicarDañoBala rs (rid,pid) = case find ((== pid) . objectId) disparosMovidos of
-              Nothing -> rs
-              Just p  ->
-                case find ((== ownerId (extras p)) . objectId) robots of
-                  Nothing -> rs
-                  Just shooter ->
-                    [ (if (objectId r == rid) && RB.esEnemigo r shooter then (let nuevaEnergia = energy (extras r) - damage (extras p)
-                                                                                  muere = nuevaEnergia <= 0
-                                                                              in r { extras = (extras r) { energy = nuevaEnergia }
-                                                                                   , explosion = explosion r || muere
-                                                                                   , explosionTime = if muere then 0 else explosionTime r
-                                                                                   }) else r)
-                    | r <- rs ]
+            nuevasExplosionesBalasObstaculos =
+              [ Explosion (position p) 0 1.0
+              | (pid, _) <- colPO
+              , p <- disparosMovidos
+              , objectId p == pid
+              ]
+
+            robotsDañados =
+              foldl aplicarDañoBala robotsParados colRP
+            aplicarDañoBala rs (rid,pid) =
+              case (find ((== pid) . objectId) disparosMovidos, find ((== rid) . objectId) rs) of
+                (Just p, Just robot) ->
+                  let shooterId = ownerId (extras p)
+                  in case find ((== shooterId) . objectId) robots of
+                       Just shooter | RB.esEnemigo robot shooter ->
+                         let e = energy (extras robot) - damage (extras p)
+                         in [ if objectId r == rid
+                              then r { extras = (extras r) { energy = e }
+                                     , explosion = e <= 0
+                                     , explosionTime = if e <= 0 then 0 else explosionTime r }
+                              else r | r <- rs ]
+                       _ -> rs
+                _ -> rs
 
             shotsRestantes =
               [ p
               | p <- disparosMovidos
               , objectId p `notElem` map snd colRP
+              , objectId p `notElem` map fst colPO
               , isInBounds (position p) (worldSize gs)
               ]
 
@@ -438,40 +612,36 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               | r <- robotsDañados
               , not (explosion r && explosionTime r > 1.5)
               ]
+
           in
             w { robots     = robotsFinal
               , shots      = shotsRestantes
-              , explosions = updateExplosions (explosions ++ nuevasExplosiones)
+              , explosions = updateExplosions (explosions ++ nuevasExplosiones ++ nuevasExplosionesObstaculos ++ nuevasExplosionesBalasObstaculos)
+              , obstaculos = obstaculosFinales
               , tick       = tick + 1
               , elapsed    = elapsed + dt
               , endTimer   = nuevoTimer
               , ganador    = nuevoGanador
-              }
+            }
 
-drawWorld :: World -> G.Picture
-drawWorld w
-  | estado w == FinJuego =
-      G.Pictures (fondo : dibRobots ++ dibExplosiones ++ [mensajeFinal])
-  | otherwise =
-      G.Pictures (fondo : dibRobots ++ dibBalas ++ dibExplosiones ++ [hud])
-  where
-    V2 wv hv = worldSize (gs w)
-    fondo = escalarMapaAlFondo wv hv (obtenerMapa (mapaActual w))
+-- NUEVO: Dibujar obstáculos
+drawObstaculo :: Size -> Obstaculo -> G.Picture
+drawObstaculo ws obs =
+  let (x, y) = worldToScreen ws (position obs)
+      V2 w h = size obs
+      ex = extras obs
 
-    dibRobots = map (drawRobot (worldSize (gs w))) (robots w)
-    dibBalas = map (drawBullet (worldSize (gs w))) (shots w)
-    dibExplosiones =
-      map (drawExplosion (worldSize (gs w))) (robots w)
-      ++ [ drawImpactExplosion (worldSize (gs w)) (expPos e) (expTime e)
-         | e <- explosions w
-         ]
+      sprite =
+        case tipoObs ex of
+          Bloqueante -> spriteObsBloqueante
+          Dañino     -> spriteDanino
+          Explosivo  ->
+            let frame = animFrame ex `mod` length spritesBomber
+            in spritesBomber !! frame
 
-    humanosVivos = length $ filter (\r -> RB.isRobotAlive r && tipo (extras r) == Humano) (robots w)
-    zombiesVivos = length $ filter (\r -> RB.isRobotAlive r && tipo (extras r) == Zombie) (robots w)
+  in G.Translate x y $
+       G.Scale (w / 1024) (h / 1024) sprite
 
-    hud = drawHUDZombies (worldSize (gs w)) (tick w) (elapsed w) humanosVivos zombiesVivos
-
-    mensajeFinal = drawFinJuegoZombies (ganador w)
 
 spawnBando :: Int -> GameState -> Int -> TipoRobot -> Int -> [Robot]
 spawnBando n gs seed tipoRobot offsetId =
@@ -501,8 +671,8 @@ spawnBando n gs seed tipoRobot offsetId =
     nombreRobot Humano k = "Humano" ++ show (k + 1)
     nombreRobot Zombie k = "Zombie" ++ show (k + 1)
 
-    sizeRobot Humano = V2 45 35
-    sizeRobot Zombie = V2 60 45
+    sizeRobot Humano = V2 35 28  -- Reducido de 45x35 a 35x28
+    sizeRobot Zombie = V2 45 35  -- Reducido de 60x45 a 45x35
 
     energiaInicial Humano = 200
     energiaInicial Zombie = 250
@@ -512,3 +682,91 @@ spawnBando n gs seed tipoRobot offsetId =
 
     velocidadMovimiento Humano = 65
     velocidadMovimiento Zombie = 75
+
+-- NUEVO: Generar obstáculos aleatorios
+
+-- NUEVO: Generar obstáculos aleatorios
+generarObstaculos :: Int -> Float -> Float -> [Obstaculo]
+generarObstaculos seed worldW worldH =
+  let
+      margen = 140
+      totalBloqueantes = 2
+      totalDaninos     = 2
+      totalExplosivos  = 8
+
+      esc1 = 0.08
+      esc2=0.15
+
+      tam Bloqueante =
+        let (sw,sh) = tamSpriteBloqueante
+        in V2 (sw * 0.20) (sh * 0.20)
+
+      tam Dañino =
+        let (sw,sh) = tamSpriteDanino
+        in V2 (sw * esc1) (sh * esc1)
+
+      tam Explosivo =
+        let (sw,sh) = tamSpriteExplosivo
+        in V2 (sw * esc2) (sh * esc2)
+
+      -- Random determinista (no usa IO)
+      rand :: Int -> Float
+      rand n = fromIntegral ((1103515245 * (seed+n) + 12345) `mod` 2147483647) / 2147483647
+
+      -- Chequeo de solapamiento (bounding box)
+      seSolapa o1 o2 =
+        let V2 w1 h1 = size o1
+            V2 w2 h2 = size o2
+            V2 x1 y1 = position o1
+            V2 x2 y2 = position o2
+        in abs (x1-x2) < (w1+w2)/2 && abs (y1-y2) < (h1+h2)/2
+
+      -- Crea un obstáculo
+      mk oid tipo x y =
+        Objeto
+          { objectId = 10000 + oid
+          , position = V2 x y
+          , velocity = pure 0
+          , angulo = 0
+          , anguloCanon = 0
+          , explosion = False
+          , explosionTime = 0
+          , size = tam tipo
+          , imagenObjeto =
+              case tipo of
+                Bloqueante -> "obstaculo_bloqueante"
+                Dañino     -> "trampa_simple"
+                Explosivo  -> "obstaculo_explosivo"
+          , extras =
+              ObstaculoData
+                tipo        -- tipoObs
+                100          -- dañoObs
+                400         -- radioExplosion
+                3           -- tiempoVida (cuenta atrás)
+                False       -- exploto
+                False       -- activado
+                0           -- animFrame
+                0           -- animTimer   
+          }
+
+      -- Intenta poner un obstáculo sin solaparse
+      place existentes oid tipo = go 0
+        where
+          go 600 = existentes
+          go k =
+            let x = margen + rand (oid*7+k)  * (worldW - 2*margen)
+                y = margen + rand (oid*13+k) * (worldH - 2*margen)
+                nuevo = mk oid tipo x y
+            in if any (seSolapa nuevo) existentes
+               then go (k+1)
+               else existentes ++ [nuevo]
+
+      idsBloq = [0 .. totalBloqueantes-1]
+      idsDan  = [totalBloqueantes .. totalBloqueantes+totalDaninos-1]
+      idsExp  = [totalBloqueantes+totalDaninos .. totalBloqueantes+totalDaninos+totalExplosivos-1]
+
+      paso1 = foldl (\acc i -> place acc i Bloqueante) [] idsBloq
+      paso2 = foldl (\acc i -> place acc i Dañino)     paso1 idsDan
+      paso3 = foldl (\acc i -> place acc i Explosivo)  paso2 idsExp
+
+  in paso3

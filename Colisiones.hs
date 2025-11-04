@@ -3,6 +3,8 @@ module Colisiones
   , detectRobotProjectileCollisions
   , detectRobotRobotCollisions
   , checkCollisions
+    , detectRobotObstaculoCollisions
+  , detectProyectilObstaculoCollisions
   ) where
 
 import Entidades
@@ -71,3 +73,21 @@ detectRobotRobotCollisions robots =
 checkCollisions :: [Robot] -> [Proyectil] -> ([(Int, Int)], [(Int, Int)])
 checkCollisions robots projectiles =
   (detectRobotRobotCollisions robots, detectRobotProjectileCollisions robots projectiles)
+
+-- NUEVO: Detectar colisiones entre robots y obstáculos
+detectRobotObstaculoCollisions :: [Robot] -> [Obstaculo] -> [(Int, Int)]
+detectRobotObstaculoCollisions robots obstaculos =
+  [ (objectId r, objectId o)
+  | r <- robots
+  , o <- obstaculos
+  , checkCollision r o
+  ]
+
+-- NUEVO: Detectar colisiones entre proyectiles y obstáculos
+detectProyectilObstaculoCollisions :: [Proyectil] -> [Obstaculo] -> [(Int, Int)]
+detectProyectilObstaculoCollisions proyectiles obstaculos =
+  [ (objectId p, objectId o)
+  | p <- proyectiles
+  , o <- obstaculos
+  , checkCollision p o
+  ]

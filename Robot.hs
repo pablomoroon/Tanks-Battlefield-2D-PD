@@ -84,6 +84,85 @@ aliadosCercanos self todos =
                    objectId e /= objectId self && 
                    distanceBetween pR (position e) <= rango) todos
 
+-- NUEVO: Verificar si hay obstáculos bloqueando el camino
+hayObstaculoEnCamino :: Position -> Position -> [Obstaculo] -> Bool
+hayObstaculoEnCamino desde hacia obstaculos =
+  let dir = normalize (hacia ^-^ desde)
+      dist = distanceBetween desde hacia
+  in any (\obs -> 
+    let posObs = position obs
+        V2 w h = size obs
+        radioObs = max w h / 2 + 20  -- Radio del obstáculo + margen
+        -- Verificar si el obstáculo está cerca de la línea de movimiento
+        vectorAObs = posObs ^-^ desde
+        proyeccion = vectorAObs `dot` dir
+        -- Solo considerar obstáculos que están en la dirección del movimiento
+        enDireccion = proyeccion > 0 && proyeccion < dist
+        -- Distancia perpendicular del obstáculo a la línea
+        distPerp = if enDireccion
+                  then let puntoEnLinea = desde ^+^ (dir ^* proyeccion)
+                       in distanceBetween posObs puntoEnLinea
+                  else 999999
+    in distPerp < radioObs
+  ) obstaculos
+
+-- NUEVO: Encontrar una ruta alternativa evitando obstáculos
+-- Parámetro prioridad: si es alta (ataque/huida urgente), puede ignorar obstáculos
+evitarObstaculos :: Position -> Position -> [Obstaculo] -> Position
+evitarObstaculos desde hacia obstaculos =
+  if not (hayObstaculoEnCamino desde hacia obstaculos)
+  then hacia
+  else
+    -- Buscar el obstáculo más cercano en el camino
+    let dir = normalize (hacia ^-^ desde)
+        obstaculosCerca = filter (\obs ->
+          let posObs = position obs
+              vectorAObs = posObs ^-^ desde
+              proyeccion = vectorAObs `dot` dir
+          in proyeccion > 0) obstaculos
+    in case obstaculosCerca of
+      [] -> hacia
+      (obs:_) ->
+        let posObs = position obs
+            V2 w h = size obs
+            radioEvasion = max w h / 2 + 60
+            -- Calcular dirección perpendicular
+            perpDir = perp dir
+            -- Dos opciones: rodear por la izquierda o derecha
+            opcion1 = posObs ^+^ (perpDir ^* radioEvasion)
+            opcion2 = posObs ^-^ (perpDir ^* radioEvasion)
+            dist1 = distanceBetween desde opcion1 + distanceBetween opcion1 hacia
+            dist2 = distanceBetween desde opcion2 + distanceBetween opcion2 hacia
+        in if dist1 < dist2 then opcion1 else opcion2
+
+-- NUEVO: Versión condicional - solo evita si no hay urgencia
+evitarObstaculosCondicional :: Position -> Position -> [Obstaculo] -> Bool -> Position
+evitarObstaculosCondicional desde hacia obstaculos ignorarSiUrgente =
+  if ignorarSiUrgente 
+  then hacia  -- En situaciones urgentes, ir directo aunque haya obstáculos
+  else evitarObstaculos desde hacia obstaculos
+
+-- NUEVO: Verificar si hay obstáculos cerca de una posición (para tácticas)
+hayObstaculoCerca :: Position -> [Obstaculo] -> Float -> Bool
+hayObstaculoCerca pos obstaculos radio =
+  any (\obs -> distanceBetween pos (position obs) < radio) obstaculos
+
+-- NUEVO: Intentar empujar al enemigo hacia un obstáculo
+calcularPosicionTactica :: Position -> Position -> [Obstaculo] -> Maybe Position
+calcularPosicionTactica posPropia posEnemigo obstaculos =
+  let obstaculosCercanos = filter (\obs -> 
+        let distAEnemigo = distanceBetween posEnemigo (position obs)
+        in distAEnemigo < 200) obstaculos
+  in case obstaculosCercanos of
+    [] -> Nothing
+    (obs:_) ->
+      -- Posicionarse para empujar al enemigo hacia el obstáculo
+      let posObs = position obs
+          dirObsAEnemigo = normalize (posEnemigo ^-^ posObs)
+          -- Posición táctica: entre el enemigo y el lado opuesto del obstáculo
+          posTactica = posObs ^-^ (dirObsAEnemigo ^* 150)
+      in Just posTactica
+
 seleccionarObjetivoPrioritario :: Robot -> [Robot] -> Maybe Robot
 seleccionarObjetivoPrioritario self [] = Nothing
 seleccionarObjetivoPrioritario self enemigos =
@@ -133,16 +212,16 @@ posicionExploracion robotId tick (V2 wx wy) currentPos =
   where
     clampVal lo hi v = max lo (min hi v)
 
-botDecision :: Int -> GameState -> Robot -> [Robot] -> [BotAction]
-botDecision tick gs self others =
+botDecision :: Int -> GameState -> [Obstaculo] -> Robot -> [Robot] -> [BotAction]
+botDecision tick gs obstaculos self others =
   let enemigos = enemigosEnRadar self others
   in case tipo (extras self) of
-       Humano  -> estrategiaHumano tick gs self enemigos
-       Zombie  -> estrategiaZombie tick gs self enemigos
+       Humano  -> estrategiaHumano tick gs obstaculos self enemigos
+       Zombie  -> estrategiaZombie tick gs obstaculos self enemigos
 
 -- HUMANOS: Disparan a los zombies
-estrategiaHumano :: Int -> GameState -> Robot -> [Robot] -> [BotAction]
-estrategiaHumano tick gs r enemigosRadar =
+estrategiaHumano :: Int -> GameState -> [Obstaculo] -> Robot -> [Robot] -> [BotAction]
+estrategiaHumano tick gs obstaculos r enemigosRadar =
   let
     pR = position r
     V2 wx wy = worldSize gs
@@ -273,15 +352,17 @@ estrategiaHumano tick gs r enemigosRadar =
             "support" -> centroGrupo
             _ -> posicionExploracion miId tick (worldSize gs) pR
           
-          destinoBase = if cercaBorde then centro
+          destinoFinal = if cercaBorde then centro
                        else if debeInvestigar 
                             then maybe destinoPatrulla id memLast
                        else destinoPatrulla
           
-          destinoFinal = ajustarFormacionDefensiva destinoBase
+          -- NUEVO: Evitar obstáculos
+          destinoSinObstaculos = evitarObstaculos pR destinoFinal obstaculos
+          destinoConFormacion = ajustarFormacionDefensiva destinoSinObstaculos
           
           barrido = sin (fromIntegral tick * 0.04) * 60
-          targetAngle = rad2deg (angleToTarget pR destinoFinal)
+          targetAngle = rad2deg (angleToTarget pR destinoConFormacion)
           newCannonAngle = smoothRotateTowards currentCannonAngle 
                                                (targetAngle + barrido) 
                                                velocidadRotacion
@@ -289,7 +370,7 @@ estrategiaHumano tick gs r enemigosRadar =
           accionesMemoria = [SetAggroCooldown nuevoCooldown]
           
       in accionRol ++ accionesMemoria ++ 
-         [RotateCannon (deg2rad newCannonAngle), Move destinoFinal]
+         [RotateCannon (deg2rad newCannonAngle), Move destinoConFormacion]
     
     Just zombie ->
       let
@@ -330,8 +411,20 @@ estrategiaHumano tick gs r enemigosRadar =
         
         puedeDisparar = tick `mod` cadenciaDisparo == 0
         
+        -- NUEVO: Determinar si hay urgencia (huida por baja vida o ataque agresivo)
+        vidaBaja = vida < 40
+        muyPeligroso = dist < 80
+        urgenciaHuida = vidaBaja && muyPeligroso
+        urgenciaAtaque = dist < 150 && vida > 100 && nuevoRol == "tank"
+        
+        -- NUEVO: Táctica - intentar empujar al zombie hacia obstáculos
+        posicionTacticaObstaculo = calcularPosicionTactica pR pZ obstaculos
+        
         destino =
           if cercaBorde then centro
+          else if urgenciaHuida then
+            -- HUIDA URGENTE: ignorar obstáculos, huir directo
+            pR ^+^ dirHuida ^* 120
           else if necesitaCobertura && not (null aliadosHeridos) then
             let herido = head aliadosHeridos
                 posHerido = position herido
@@ -342,13 +435,18 @@ estrategiaHumano tick gs r enemigosRadar =
           else if dist < (minSafe - zonaEstable) then
             pR ^+^ dirHuida ^* 80
           else if dist > (maxDist + zonaEstable) then
-            pR ^+^ dir ^* 70
+            -- Avanzar hacia el enemigo, pero usar táctica si hay obstáculos cerca
+            case posicionTacticaObstaculo of
+              Just posTactica | urgenciaAtaque -> posTactica  -- Empujar hacia obstáculo
+              _ -> pR ^+^ dir ^* 70
           else
             let perpDir = perp dir
                 strafeDir = if tick `mod` 200 < 100 then perpDir else perpDir ^* (-1)
             in pR ^+^ (strafeDir ^* 40)
         
-        destinoFinal = ajustarFormacionDefensiva destino
+        -- NUEVO: Evitar obstáculos solo si NO hay urgencia
+        destinoSinObstaculos = evitarObstaculosCondicional pR destino obstaculos urgenciaHuida
+        destinoFinal = ajustarFormacionDefensiva destinoSinObstaculos
         
         accionDisparo = if estoyApuntando && puedeDisparar 
                         then [Shoot] 
@@ -359,8 +457,8 @@ estrategiaHumano tick gs r enemigosRadar =
          accionDisparo
 
 -- ZOMBIES: Persiguen y atacan a los humanos
-estrategiaZombie :: Int -> GameState -> Robot -> [Robot] -> [BotAction]
-estrategiaZombie tick gs r enemigosRadar =
+estrategiaZombie :: Int -> GameState -> [Obstaculo] -> Robot -> [Robot] -> [BotAction]
+estrategiaZombie tick gs obstaculos r enemigosRadar =
   let
     pR = position r
     V2 wx wy = worldSize gs
@@ -370,7 +468,6 @@ estrategiaZombie tick gs r enemigosRadar =
     centro = V2 (wx / 2) (wy / 2)
     
     currentAngle = angulo r
-    vida = energy (extras r)
     
     memLast = memLastSeen (extras r)
     memCooldown = memAggroCooldown (extras r)
@@ -403,7 +500,9 @@ estrategiaZombie tick gs r enemigosRadar =
                else acc
             ) (pure 0) aliados
           
-          destinoConRepulsion = destinoFinal ^+^ fuerzaRepulsion
+          -- NUEVO: Evitar obstáculos
+          destinoSinObstaculos = evitarObstaculos pR destinoFinal obstaculos
+          destinoConRepulsion = destinoSinObstaculos ^+^ fuerzaRepulsion
           
           targetAngle = rad2deg (angleToTarget pR destinoConRepulsion)
           newAngle = smoothRotateTowards currentAngle targetAngle velocidadRotacion
@@ -437,16 +536,38 @@ estrategiaZombie tick gs r enemigosRadar =
           ) (pure 0) aliados
         
         distanciaAtaque = 60
+        vidaZombie = energy (extras r)
+        
+        -- NUEVO: Determinar urgencia para zombies
+        muyHerido = vidaZombie < 50
+        muyCerca = dist < 100
+        urgenciaAtaque = muyCerca || (dist < 150 && vidaZombie > 150)
+        
+        -- NUEVO: Táctica zombi - empujar humano hacia obstáculos
+        posicionTacticaObstaculo = calcularPosicionTactica pR pH obstaculos
         
         destino = if cercaBorde 
                  then centro
+                 else if urgenciaAtaque && dist > distanciaAtaque then
+                   -- Ataque agresivo: usar táctica de obstáculo si está disponible
+                   case posicionTacticaObstaculo of
+                     Just posTactica -> posTactica
+                     Nothing -> pH
                  else if dist > distanciaAtaque 
                       then pH
                       else pR ^+^ (dir ^* 25)
         
-        destinoFinal = destino ^+^ (fuerzaRepulsion ^* 0.4)
+        -- NUEVO: Evitar obstáculos solo si no está atacando agresivamente o muy herido
+        ignorarObstaculos = urgenciaAtaque || muyHerido
+        destinoSinObstaculos = evitarObstaculosCondicional pR destino obstaculos ignorarObstaculos
+        destinoFinal = destinoSinObstaculos ^+^ (fuerzaRepulsion ^* 0.4)
         
         targetAngle = rad2deg (angleToTarget pR destinoFinal)
         newAngle = smoothRotateTowards currentAngle targetAngle velocidadRotacion
         
-      in accionesMemoria ++ [Rotate (deg2rad newAngle), Move destinoFinal]
+        -- NUEVO: Zombies disparan cuando están cerca
+        apuntaBien = abs (currentAngle - targetAngle) < 15
+        puedeDisparar = dist < 200 && apuntaBien
+        accionesAtaque = if puedeDisparar then [Shoot] else []
+        
+      in accionesMemoria ++ [Rotate (deg2rad newAngle), Move destinoFinal] ++ accionesAtaque

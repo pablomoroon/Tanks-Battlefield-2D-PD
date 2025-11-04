@@ -7,7 +7,7 @@ module Render
 
 import Entidades
 import qualified Graphics.Gloss as G
-import Assets (spriteCuerpo, spriteCanion, spriteZombie)
+import Assets (spriteCuerpo, spriteCanion, spriteZombie,spritesExplosion)
 
 worldToScreen :: Size -> Position -> (Float, Float)
 worldToScreen (V2 w h) (V2 x y) = (x - w/2, y - h/2)
@@ -53,7 +53,7 @@ drawRobot ws r
             Zombie -> G.Blank
 
       in G.Translate x y $ G.Pictures
-           [ G.Rotate (-angCuerpo)
+           [ G.Rotate (-angCuerpo+90)
                (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
            , dibujoCanon
            , barraVida
@@ -68,14 +68,22 @@ explosionPicture t = G.Pictures
 
 drawExplosion :: Size -> Robot -> G.Picture
 drawExplosion ws r
-  | explosion r = let (x,y) = worldToScreen ws (position r)
-                  in G.Translate x y (explosionPicture (explosionTime r))
-  | otherwise   = G.Blank
+  | explosion r =
+      let (x,y) = worldToScreen ws (position r)
+      in G.Translate x y (explosionPicture (explosionTime r))
+  | otherwise = G.Blank
 
-drawImpactExplosion :: Size -> Position -> Float -> G.Picture
-drawImpactExplosion ws pos t =
-  let (x,y) = worldToScreen ws pos
-  in G.Translate x y (explosionPicture (t * 1.5))
+
+drawImpactExplosion :: Size -> Position -> Float -> Float -> G.Picture
+drawImpactExplosion ws pos t scale =
+  let (x, y) = worldToScreen ws pos
+      n = length spritesExplosion
+      frameIndex = min (n - 1) (floor (t * fromIntegral n))
+      frame = spritesExplosion !! frameIndex
+      baseScale = 0.18  -- tamaño base del sprite
+  in G.Translate x y $
+       G.Scale (baseScale * scale) (baseScale * scale) frame
+
 
 drawBullet :: Size -> Proyectil -> G.Picture
 drawBullet ws p = let (x,y) = worldToScreen ws (position p)

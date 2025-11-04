@@ -5,6 +5,7 @@ module Entidades
   , Point, Vector, Angle, Distance, Tiempo, Position, Velocity, Size, Scale
   , Objeto(..), RobotData(..), ProyectilData(..), Robot, Proyectil
   , TipoRobot(..)
+  , TipoObstaculo(..), ObstaculoData(..), Obstaculo
   , Action(..), GameState(..), BotAction(..)
   ) where
 
@@ -76,8 +77,26 @@ data ProyectilData = ProyectilData
   , ownerId  :: Int
   } deriving (Show, Eq)
 
+-- NUEVO: Tipos de obstáculos
+data TipoObstaculo = Bloqueante | Dañino | Explosivo deriving (Show, Eq)
+
+data ObstaculoData = ObstaculoData
+  { tipoObs        :: TipoObstaculo
+  , dañoObs        :: Float
+  , radioExplosion :: Float
+  , tiempoVida     :: Float
+  , exploto        :: Bool
+  , activado       :: Bool
+  , animFrame      :: Int
+  , animTimer      :: Float      
+  } deriving (Show, Eq)
+     
+
+
+
 type Robot     = Objeto RobotData
 type Proyectil = Objeto ProyectilData
+type Obstaculo = Objeto ObstaculoData
 
 data Action = Action
   { stop      :: Bool
