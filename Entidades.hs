@@ -57,19 +57,28 @@ data Objeto a = Objeto
   , extras        :: a
   } deriving (Show, Eq, Functor)
 
--- MODIFICADO: Ahora solo Humano y Zombie
 data TipoRobot = Humano | Zombie deriving (Show, Eq)
 
 data RobotData = RobotData
   { name   :: String
   , energy :: Float
+  , shield :: Float              
+  , maxShield :: Float           
+  , shieldRechargeRate :: Float  
+  , shieldRechargeDelay :: Float 
+  , damageFlash :: Float         
   , range  :: Distance
   , speed  :: Float
   , tipo :: TipoRobot
-  , memTarget :: Maybe Int        -- Id del objetivo asignado (si existe)
-  , memRole   :: Maybe String     -- Rol táctico: "leader", "flank", "chase", etc.
-  , memLastSeen :: Maybe Position -- Última posición vista del objetivo
-  , memAggroCooldown :: Int       -- Cooldown para re-asignar/agitar agresividad
+  , memTarget :: Maybe Int        
+  , memRole   :: Maybe String     
+  , memLastSeen :: Maybe Position 
+  , memAggroCooldown :: Int       
+  , memLastPosition :: Maybe Position  --  Última posición registrada
+  , memStuckCounter :: Int             --  Contador de tiempo estancado
+  , memLastMoveDir :: Maybe Vector     --  Última dirección de movimiento exitosa
+  , memPositionHistory :: [Position]   -- Historial de últimas 10 posiciones
+  , memFailedDestinations :: [Position] --  Destinos que no funcionaron
   } deriving (Show, Eq)
 
 data ProyectilData = ProyectilData
@@ -77,7 +86,7 @@ data ProyectilData = ProyectilData
   , ownerId  :: Int
   } deriving (Show, Eq)
 
--- NUEVO: Tipos de obstáculos
+--  : Tipos de obstáculos
 data TipoObstaculo = Bloqueante | Dañino | Explosivo deriving (Show, Eq)
 
 data ObstaculoData = ObstaculoData
@@ -121,5 +130,8 @@ data BotAction
   | SetRole (Maybe String)       -- Asignar un rol táctico
   | UpdateLastSeen Position      -- Actualizar última posición vista del objetivo
   | SetAggroCooldown Int         -- Establecer cooldown/agresividad
+  | UpdateStuckState Position Int (Maybe Vector)  --  : Actualizar estado de estancamiento (posición, contador, dirección)
+  | UpdatePositionHistory Position  --  : Agregar posición al historial
+  | MarkFailedDestination Position  --  : Marcar un destino como fallido
     | Combo [BotAction]
   deriving (Show, Eq)

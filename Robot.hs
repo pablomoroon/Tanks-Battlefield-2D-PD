@@ -8,6 +8,7 @@ module Robot
 import Entidades
 import Fisicas
 import Control.Applicative (liftA2)
+import Data.List (find)
 
 isRobotAlive :: Robot -> Bool
 isRobotAlive r = energy (extras r) > 0
@@ -60,6 +61,58 @@ smoothRotateTowards current target speed =
       | otherwise = a
     clamp lo hi v = max lo (min hi v)
 
+--  : Verificar si un destino está en el historial de fallidos
+estaEnHistorialFallido :: Position -> [Position] -> Float -> Bool
+estaEnHistorialFallido destino historial radio =
+  any (\pos -> distanceBetween destino pos < radio) historial
+
+--  : Verificar si estamos dando vueltas en círculo
+estaDandoVueltas :: [Position] -> Bool
+estaDandoVueltas posiciones
+  | length posiciones < 5 = False
+  | otherwise =
+      let ultimas5 = take 5 posiciones
+          centro = promedioPosiciones ultimas5
+          distancias = map (distanceBetween centro) ultimas5
+          maxDist = maximum distancias
+      in maxDist < 50  -- Si todas las últimas 5 posiciones están en un radio de 50, está dando vueltas
+
+promedioPosiciones :: [Position] -> Position
+promedioPosiciones [] = V2 0 0
+promedioPosiciones ps =
+  let n = fromIntegral (length ps)
+      sumPos = foldl (^+^) (V2 0 0) ps
+  in (1/n) *^ sumPos
+
+--  : Generar destino que evite lugares ya intentados
+generarDestinoNoRepetido :: Position -> [Position] -> [Position] -> Int -> Size -> Position
+generarDestinoNoRepetido posActual historial fallidos tick (V2 wx wy) =
+  let intentos = [0..20]  -- Intentar hasta 20 posiciones diferentes
+      hash seed = (objectId posActual `mod` 1000 + seed * 37 + tick) `mod` 360
+      generarCandidato seed =
+        let angle = deg2rad (fromIntegral (hash seed))
+            distancia = 200 + fromIntegral (seed * 30)
+            candidato = posActual ^+^ V2 (cos angle * distancia) (sin angle * distancia)
+            -- Mantener dentro de límites
+            margen = 100
+            V2 cx cy = candidato
+            clamped = V2 (clamp margen (wx - margen) cx) (clamp margen (wy - margen) cy)
+        in clamped
+      
+      -- Buscar primer candidato que no esté en historial ni fallidos
+      buscarValido [] = generarCandidato 0  -- Si no encuentra, usar cualquiera
+      buscarValido (seed:seeds) =
+        let candidato = generarCandidato seed
+            enHistorial = estaEnHistorialFallido candidato historial 40
+            enFallidos = estaEnHistorialFallido candidato fallidos 60
+        in if not enHistorial && not enFallidos
+           then candidato
+           else buscarValido seeds
+  in buscarValido intentos
+  where
+    objectId (V2 x y) = floor (x + y) `mod` 1000
+    clamp lo hi v = max lo (min hi v)
+
 -- Detecta robots cercanos (todos)
 robotsCercanos :: Robot -> [Robot] -> [Robot]
 robotsCercanos self todos =
@@ -84,7 +137,7 @@ aliadosCercanos self todos =
                    objectId e /= objectId self && 
                    distanceBetween pR (position e) <= rango) todos
 
--- NUEVO: Verificar si hay obstáculos bloqueando el camino
+--  : Verificar si hay obstáculos bloqueando el camino
 hayObstaculoEnCamino :: Position -> Position -> [Obstaculo] -> Bool
 hayObstaculoEnCamino desde hacia obstaculos =
   let dir = normalize (hacia ^-^ desde)
@@ -106,7 +159,7 @@ hayObstaculoEnCamino desde hacia obstaculos =
     in distPerp < radioObs
   ) obstaculos
 
--- NUEVO: Encontrar una ruta alternativa evitando obstáculos
+--  : Encontrar una ruta alternativa evitando obstáculos
 -- Parámetro prioridad: si es alta (ataque/huida urgente), puede ignorar obstáculos
 evitarObstaculos :: Position -> Position -> [Obstaculo] -> Position
 evitarObstaculos desde hacia obstaculos =
@@ -135,19 +188,19 @@ evitarObstaculos desde hacia obstaculos =
             dist2 = distanceBetween desde opcion2 + distanceBetween opcion2 hacia
         in if dist1 < dist2 then opcion1 else opcion2
 
--- NUEVO: Versión condicional - solo evita si no hay urgencia
+--  : Versión condicional - solo evita si no hay urgencia
 evitarObstaculosCondicional :: Position -> Position -> [Obstaculo] -> Bool -> Position
 evitarObstaculosCondicional desde hacia obstaculos ignorarSiUrgente =
   if ignorarSiUrgente 
   then hacia  -- En situaciones urgentes, ir directo aunque haya obstáculos
   else evitarObstaculos desde hacia obstaculos
 
--- NUEVO: Verificar si hay obstáculos cerca de una posición (para tácticas)
+--  : Verificar si hay obstáculos cerca de una posición (para tácticas)
 hayObstaculoCerca :: Position -> [Obstaculo] -> Float -> Bool
 hayObstaculoCerca pos obstaculos radio =
   any (\obs -> distanceBetween pos (position obs) < radio) obstaculos
 
--- NUEVO: Intentar empujar al enemigo hacia un obstáculo
+--  : Intentar empujar al enemigo hacia un obstáculo
 calcularPosicionTactica :: Position -> Position -> [Obstaculo] -> Maybe Position
 calcularPosicionTactica posPropia posEnemigo obstaculos =
   let obstaculosCercanos = filter (\obs -> 
@@ -167,6 +220,17 @@ seleccionarObjetivoPrioritario :: Robot -> [Robot] -> Maybe Robot
 seleccionarObjetivoPrioritario self [] = Nothing
 seleccionarObjetivoPrioritario self enemigos =
   let pR = position self
+      --  : Si hay un objetivo en memoria y no está estancado, intentar mantenerlo
+      memT = memTarget (extras self)
+      memStuck = memStuckCounter (extras self)
+      
+      -- Forzar cambio de objetivo solo si está MUY estancado
+      debesCambiarObjetivo = memStuck > 220  
+      
+      objetivoActual = case memT of
+        Just tid | not debesCambiarObjetivo -> find ((== tid) . objectId) enemigos
+        _ -> Nothing
+      
       scoreEnemigo e =
         let dist = distanceBetween pR (position e)
             vida = energy (extras e)
@@ -174,7 +238,9 @@ seleccionarObjetivoPrioritario self enemigos =
             distScore = dist / 2.0
         in vidaScore + distScore
       mejorEnemigo = foldl1 (\e1 e2 -> if scoreEnemigo e1 < scoreEnemigo e2 then e1 else e2) enemigos
-  in Just mejorEnemigo
+  in case objetivoActual of
+       Just obj -> Just obj  -- Mantener objetivo actual si no está estancado
+       Nothing -> Just mejorEnemigo  -- Buscar   objetivo
 
 posicionExploracion :: Int -> Int -> Size -> Position -> Position
 posicionExploracion robotId tick (V2 wx wy) currentPos =
@@ -239,6 +305,25 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
     memR = memRole (extras r)
     memLast = memLastSeen (extras r)
     memCooldown = memAggroCooldown (extras r)
+    memLastPos = memLastPosition (extras r)
+    memStuck = memStuckCounter (extras r)
+    memLastDir = memLastMoveDir (extras r)
+    memHistory = memPositionHistory (extras r)  --  
+    memFailed = memFailedDestinations (extras r)  --  
+    
+    --  : Detección de estancamiento (MUY SUAVE - evitar temblor)
+    distanciaMovimiento = case memLastPos of
+      Just lastPos -> distanceBetween pR lastPos
+      Nothing -> 999
+    
+    estaEstancado = distanciaMovimiento < 1.5  -- Reducido de 3.0 a 1.5 - REALMENTE atascado
+    nuevoStuckCounter = if estaEstancado then memStuck + 1 else max 0 (memStuck - 3)  -- Decrece aún más rápido
+    
+    --  : Detectar si está dando vueltas en círculo
+    dandoVueltas = estaDandoVueltas memHistory
+    
+    -- Si lleva MUCHO tiempo estancado (150 frames = 2.5 segundos), cambiar dirección - Aumentado de 90 a 150
+    debeReorientar = nuevoStuckCounter > 150 || (dandoVueltas && nuevoStuckCounter > 100)
     
     aliados = aliadosCercanos r enemigosRadar
     distanciaMinAliados = 100
@@ -277,10 +362,10 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
                 else []
     
     (distanciaPreferida, cadenciaDisparo, velocidadRotacion) = case nuevoRol of
-      "tank"    -> (rango * 0.60, 40, 5.0)
-      "sniper"  -> (rango * 0.85, 60, 3.5)
-      "support" -> (rango * 0.70, 50, 4.5)
-      _         -> (rango * 0.75, 55, 4.0)
+      "tank"    -> (rango * 0.60, 40, 2.0)  
+      "sniper"  -> (rango * 0.85, 60, 1.5)  
+      "support" -> (rango * 0.70, 50, 2.0)  
+      _         -> (rango * 0.75, 55, 2.0) 
     
     aliadosHeridos = filter (\a -> energy (extras a) < 50) aliados
     
@@ -334,6 +419,16 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
               nuevoCooldown > 0 && distanceBetween pR lastPos > 50
             _ -> False
           
+       
+          direccionAleatoria = 
+            if dandoVueltas || nuevoStuckCounter > 140  
+            then generarDestinoNoRepetido pR memHistory memFailed tick (worldSize gs)
+            else 
+              let hash = (objectId r * 1000 + tick) `mod` 360
+                  angle = deg2rad (fromIntegral hash)
+                  distancia = 250
+              in pR ^+^ V2 (cos angle * distancia) (sin angle * distancia)
+          
           destinoPatrulla = case nuevoRol of
             "tank" -> 
               let angulo = fromIntegral tick * 0.008
@@ -353,11 +448,12 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
             _ -> posicionExploracion miId tick (worldSize gs) pR
           
           destinoFinal = if cercaBorde then centro
+                       else if debeReorientar then direccionAleatoria  --  : Si estancado, ir en dirección aleatoria
                        else if debeInvestigar 
                             then maybe destinoPatrulla id memLast
                        else destinoPatrulla
           
-          -- NUEVO: Evitar obstáculos
+          --  : Evitar obstáculos
           destinoSinObstaculos = evitarObstaculos pR destinoFinal obstaculos
           destinoConFormacion = ajustarFormacionDefensiva destinoSinObstaculos
           
@@ -368,8 +464,11 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
                                                velocidadRotacion
           
           accionesMemoria = [SetAggroCooldown nuevoCooldown]
+          accionesEstancamiento = [UpdateStuckState pR nuevoStuckCounter (Just (normalize (destinoConFormacion ^-^ pR)))]
+          accionesHistorial = [UpdatePositionHistory pR]  
+          accionesFallido = if nuevoStuckCounter > 180 then [MarkFailedDestination destinoConFormacion] else []  -- Aumentado de 120 a 180
           
-      in accionRol ++ accionesMemoria ++ 
+      in accionRol ++ accionesMemoria ++ accionesEstancamiento ++ accionesHistorial ++ accionesFallido ++
          [RotateCannon (deg2rad newCannonAngle), Move destinoConFormacion]
     
     Just zombie ->
@@ -383,6 +482,11 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
           , UpdateLastSeen pZ
           , SetAggroCooldown 180
           ]
+        
+        --  : Si está muy estancado, limpiar objetivo para forzar cambio
+        accionesMemoriaFinal = if shouldForceNewTarget
+                              then [SetTarget Nothing, SetAggroCooldown 0]
+                              else accionesMemoria
         
         targetAngle = rad2deg (angleToTarget pR pZ)
         newCannonAngle = smoothRotateTowards currentCannonAngle targetAngle velocidadRotacion
@@ -411,20 +515,35 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
         
         puedeDisparar = tick `mod` cadenciaDisparo == 0
         
-        -- NUEVO: Determinar si hay urgencia (huida por baja vida o ataque agresivo)
+        --  : Determinar si hay urgencia (huida por baja vida o ataque agresivo)
         vidaBaja = vida < 40
         muyPeligroso = dist < 80
         urgenciaHuida = vidaBaja && muyPeligroso
         urgenciaAtaque = dist < 150 && vida > 100 && nuevoRol == "tank"
         
-        -- NUEVO: Táctica - intentar empujar al zombie hacia obstáculos
+        --  : Táctica - intentar empujar al zombie hacia obstáculos
         posicionTacticaObstaculo = calcularPosicionTactica pR pZ obstaculos
+        
+        --  : Si está estancado en combate, usar evasión más agresiva
+        direccionEvasion = if debeReorientar
+          then let hash = (objectId r * 1000 + tick) `mod` 360
+                   angle = deg2rad (fromIntegral hash)
+                   -- MOVIMIENTO MÁS GRANDE para salir del atasco
+                   distancia = 180
+               in pR ^+^ V2 (cos angle * distancia) (sin angle * distancia)
+          else pZ
+        
+        --  : Forzar cambio de objetivo si está muy estancado
+        shouldForceNewTarget = debeReorientar && nuevoStuckCounter > 200  -- Aumentado de 150 a 200
         
         destino =
           if cercaBorde then centro
           else if urgenciaHuida then
             -- HUIDA URGENTE: ignorar obstáculos, huir directo
             pR ^+^ dirHuida ^* 120
+          else if debeReorientar && vida < 50 then
+            --  : Si está estancado y con poca vida, evadir agresivamente
+            direccionEvasion
           else if necesitaCobertura && not (null aliadosHeridos) then
             let herido = head aliadosHeridos
                 posHerido = position herido
@@ -444,7 +563,7 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
                 strafeDir = if tick `mod` 200 < 100 then perpDir else perpDir ^* (-1)
             in pR ^+^ (strafeDir ^* 40)
         
-        -- NUEVO: Evitar obstáculos solo si NO hay urgencia
+        --  : Evitar obstáculos solo si NO hay urgencia
         destinoSinObstaculos = evitarObstaculosCondicional pR destino obstaculos urgenciaHuida
         destinoFinal = ajustarFormacionDefensiva destinoSinObstaculos
         
@@ -452,7 +571,11 @@ estrategiaHumano tick gs obstaculos r enemigosRadar =
                         then [Shoot] 
                         else []
         
-      in accionRol ++ accionesMemoria ++ 
+        accionesEstancamiento = [UpdateStuckState pR nuevoStuckCounter (Just dir)]
+        accionesHistorial = [UpdatePositionHistory pR]  --  
+        accionesFallido = if shouldForceNewTarget then [MarkFailedDestination destinoFinal] else []  --  
+        
+      in accionRol ++ accionesMemoriaFinal ++ accionesEstancamiento ++ accionesHistorial ++ accionesFallido ++
          [RotateCannon (deg2rad newCannonAngle), Move destinoFinal] ++ 
          accionDisparo
 
@@ -471,17 +594,42 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
     
     memLast = memLastSeen (extras r)
     memCooldown = memAggroCooldown (extras r)
+    memLastPos = memLastPosition (extras r)
+    memStuck = memStuckCounter (extras r)
+    memLastDir = memLastMoveDir (extras r)
+    memHistory = memPositionHistory (extras r)  --  
+    memFailed = memFailedDestinations (extras r)  --  
+    
+    --  : Detección de estancamiento (MUY SUAVE - evitar temblor)
+    distanciaMovimiento = case memLastPos of
+      Just lastPos -> distanceBetween pR lastPos
+      Nothing -> 999
+    
+    estaEstancado = distanciaMovimiento < 1.5  -- REALMENTE atascado
+    nuevoStuckCounter = if estaEstancado then memStuck + 1 else max 0 (memStuck - 3)
+    dandoVueltas = estaDandoVueltas memHistory  --  
+    debeReorientar = nuevoStuckCounter > 150 || (dandoVueltas && nuevoStuckCounter > 100)  -- Aumentado tiempo
     
     aliados = aliadosCercanos r enemigosRadar
     distanciaMinAliados = 80
     
-    velocidadRotacion = 6.0
-    
+    velocidadRotacion = 2.0  -- Reducido de 3.5 a 2.0 para rotación muy suave
+  
   in case seleccionarObjetivoPrioritario r enemigosRadar of
     Nothing ->
       let 
           nuevoCooldown = max 0 (memCooldown - 1)
           debeInvestigar = nuevoCooldown > 30 && memLast /= Nothing
+          
+          --  : Dirección aleatoria que evita lugares ya intentados
+          direccionAleatoria = 
+            if dandoVueltas || nuevoStuckCounter > 140  -- Aumentado de 100 a 140
+            then generarDestinoNoRepetido pR memHistory memFailed tick (worldSize gs)
+            else
+              let hash = (objectId r * 2000 + tick) `mod` 360
+                  angle = deg2rad (fromIntegral hash)
+                  distancia = 250
+              in pR ^+^ V2 (cos angle * distancia) (sin angle * distancia)
           
           destinoBase = case memLast of
             Just lastPos | debeInvestigar && distanceBetween pR lastPos > 50 -> lastPos
@@ -490,7 +638,9 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
                   radio = min wx wy * 0.35
               in centro ^+^ V2 (cos angulo * radio) (sin angulo * radio)
           
-          destinoFinal = if cercaBorde then centro else destinoBase
+          destinoFinal = if cercaBorde then centro 
+                       else if debeReorientar then direccionAleatoria  --  : Si estancado, ir en dirección aleatoria
+                       else destinoBase
           
           fuerzaRepulsion = foldl (\acc a -> 
             let dist = distanceBetween pR (position a)
@@ -500,7 +650,7 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
                else acc
             ) (pure 0) aliados
           
-          -- NUEVO: Evitar obstáculos
+          --  : Evitar obstáculos
           destinoSinObstaculos = evitarObstaculos pR destinoFinal obstaculos
           destinoConRepulsion = destinoSinObstaculos ^+^ fuerzaRepulsion
           
@@ -511,7 +661,11 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
                            then [SetTarget Nothing, SetAggroCooldown 0]
                            else [SetAggroCooldown nuevoCooldown]
           
-      in accionesMemoria ++ [Rotate (deg2rad newAngle), Move destinoConRepulsion]
+          accionesEstancamiento = [UpdateStuckState pR nuevoStuckCounter (Just (normalize (destinoConRepulsion ^-^ pR)))]
+          accionesHistorial = [UpdatePositionHistory pR]  --  
+          accionesFallido = if nuevoStuckCounter > 180 then [MarkFailedDestination destinoConRepulsion] else []  -- Aumentado de 120 a 180
+          
+      in accionesMemoria ++ accionesEstancamiento ++ accionesHistorial ++ accionesFallido ++ [Rotate (deg2rad newAngle), Move destinoConRepulsion]
     
     Just humano ->
       let
@@ -524,6 +678,11 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
           , UpdateLastSeen pH
           , SetAggroCooldown 120
           ]
+        
+        --  : Si está muy estancado, limpiar objetivo para forzar cambio
+        accionesMemoriaFinal = if shouldForceNewTarget
+                              then [SetTarget Nothing, SetAggroCooldown 0]
+                              else accionesMemoria
         
         dir = normalize (pH ^-^ pR)
         
@@ -538,16 +697,27 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
         distanciaAtaque = 60
         vidaZombie = energy (extras r)
         
-        -- NUEVO: Determinar urgencia para zombies
+        --  : Determinar urgencia para zombies
         muyHerido = vidaZombie < 50
         muyCerca = dist < 100
         urgenciaAtaque = muyCerca || (dist < 150 && vidaZombie > 150)
         
-        -- NUEVO: Táctica zombi - empujar humano hacia obstáculos
+        --  : Táctica zombi - empujar humano hacia obstáculos
         posicionTacticaObstaculo = calcularPosicionTactica pR pH obstaculos
+        
+        --  : Si está estancado, usar ataque más directo
+        direccionDirecta = if debeReorientar
+          then pH  -- Ir directo al objetivo si está estancado
+          else pH
+        
+        --  : Forzar cambio de objetivo si está muy estancado
+        shouldForceNewTarget = debeReorientar && nuevoStuckCounter > 200  -- Aumentado de 150 a 200
         
         destino = if cercaBorde 
                  then centro
+                 else if debeReorientar && dist > distanciaAtaque then
+                   --  : Si está estancado, ataque más directo
+                   direccionDirecta
                  else if urgenciaAtaque && dist > distanciaAtaque then
                    -- Ataque agresivo: usar táctica de obstáculo si está disponible
                    case posicionTacticaObstaculo of
@@ -557,7 +727,7 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
                       then pH
                       else pR ^+^ (dir ^* 25)
         
-        -- NUEVO: Evitar obstáculos solo si no está atacando agresivamente o muy herido
+        --  : Evitar obstáculos solo si no está atacando agresivamente o muy herido
         ignorarObstaculos = urgenciaAtaque || muyHerido
         destinoSinObstaculos = evitarObstaculosCondicional pR destino obstaculos ignorarObstaculos
         destinoFinal = destinoSinObstaculos ^+^ (fuerzaRepulsion ^* 0.4)
@@ -565,9 +735,13 @@ estrategiaZombie tick gs obstaculos r enemigosRadar =
         targetAngle = rad2deg (angleToTarget pR destinoFinal)
         newAngle = smoothRotateTowards currentAngle targetAngle velocidadRotacion
         
-        -- NUEVO: Zombies disparan cuando están cerca
+        --  : Zombies disparan cuando están cerca
         apuntaBien = abs (currentAngle - targetAngle) < 15
         puedeDisparar = dist < 200 && apuntaBien
         accionesAtaque = if puedeDisparar then [Shoot] else []
         
-      in accionesMemoria ++ [Rotate (deg2rad newAngle), Move destinoFinal] ++ accionesAtaque
+        accionesEstancamiento = [UpdateStuckState pR nuevoStuckCounter (Just dir)]
+        accionesHistorial = [UpdatePositionHistory pR]  --  
+        accionesFallido = if shouldForceNewTarget then [MarkFailedDestination destinoFinal] else []  --  
+        
+      in accionesMemoriaFinal ++ accionesEstancamiento ++ accionesHistorial ++ accionesFallido ++ [Rotate (deg2rad newAngle), Move destinoFinal] ++ accionesAtaque

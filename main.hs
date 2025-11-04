@@ -48,7 +48,7 @@ data World = World
   , robots     :: [Robot]
   , shots      :: [Proyectil]
   , explosions :: [Explosion]
-  , obstaculos :: [Obstaculo]  -- NUEVO
+  , obstaculos :: [Obstaculo]  
   , tick       :: Int
   , elapsed    :: Tiempo
   , estado     :: EstadoJuego
@@ -69,7 +69,7 @@ data Explosion = Explosion
 main :: IO ()
 main =
   GG.play
-    (G.InWindow "Humanos vs Zombies" (1280, 800) (100, 100))
+    G.FullScreen
     (G.makeColorI 15 15 25 255)
     60
     (Menu initialMenu)
@@ -143,7 +143,7 @@ drawWorld w
     V2 wv hv = worldSize (gs w)
     fondo = escalarMapaAlFondo wv hv (obtenerMapa (mapaActual w))
 
-    dibObstaculos = map (drawObstaculo (worldSize (gs w))) (obstaculos w)  -- NUEVO
+    dibObstaculos = map (drawObstaculo (worldSize (gs w))) (obstaculos w)  
     dibRobots = map (drawRobot (worldSize (gs w))) (robots w)
     dibBalas = map (drawBullet (worldSize (gs w))) (shots w)
     dibExplosiones =
@@ -244,7 +244,7 @@ crearMundoDesdeMenu MenuState{..} =
     , robots = humanos ++ zombies
     , shots = []
     , explosions = []
-    , obstaculos = obstaculosGenerados  -- NUEVO
+    , obstaculos = obstaculosGenerados  
     , tick = 0
     , elapsed = 0
     , estado = Jugando
@@ -268,6 +268,11 @@ mkRobot rid nm tipoR pos ang sz energia rango vel =
     , extras        = RobotData
       { name   = nm
       , energy = energia
+      , shield = escudoInicial tipoR                    
+      , maxShield = escudoInicial tipoR                 
+      , shieldRechargeRate = velocidadRecarga tipoR     
+      , shieldRechargeDelay = 0                         
+      , damageFlash = 0                                 
       , range  = rango
       , speed  = vel
       , tipo   = tipoR
@@ -275,8 +280,18 @@ mkRobot rid nm tipoR pos ang sz energia rango vel =
       , memRole = Nothing
       , memLastSeen = Nothing
       , memAggroCooldown = 0
+      , memLastPosition = Nothing  
+      , memStuckCounter = 0        
+      , memLastMoveDir = Nothing   
+      , memPositionHistory = []    
+      , memFailedDestinations = [] 
       }
     }
+  where
+    escudoInicial Humano = 100
+    escudoInicial Zombie = 80
+    velocidadRecarga Humano = 5.0  -- Recarga 5 puntos por tick después del delay
+    velocidadRecarga Zombie = 4.0  -- Recarga 4 puntos por tick después del delay
 
 mkProjectile :: Int -> Position -> Vector -> Float -> Int -> Proyectil
 mkProjectile pid pos vel dmg owner =
@@ -324,6 +339,24 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
       SetAggroCooldown n ->
         let ex = extras rob in (rob { extras = ex { memAggroCooldown = n } }, ds)
 
+      UpdateStuckState pos counter dir ->  
+        let ex = extras rob 
+        in (rob { extras = ex { memLastPosition = Just pos
+                              , memStuckCounter = counter
+                              , memLastMoveDir = dir } }, ds)
+
+      UpdatePositionHistory pos ->  
+        let ex = extras rob
+            history = memPositionHistory ex
+            newHistory = take 10 (pos : history)  -- Mantener últimas 10 posiciones
+        in (rob { extras = ex { memPositionHistory = newHistory } }, ds)
+      
+      MarkFailedDestination pos ->  
+        let ex = extras rob
+            failed = memFailedDestinations ex
+            newFailed = take 5 (pos : failed)  -- Mantener últimos 5 destinos fallidos
+        in (rob { extras = ex { memFailedDestinations = newFailed } }, ds)
+
       Shoot ->
         if tipo (extras rob) == Humano
         then
@@ -336,7 +369,7 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
                 (objectId rob * 100000 + length ds)
                 posCanon
                 velBala
-                12
+                8  -- Reducido de 12 a 8
                 (objectId rob)
           in (rob, ds ++ [newShot])
         else (rob, ds)
@@ -344,9 +377,54 @@ applyBotActions _ _ r acts = foldl ejecutar (r, []) acts
       Combo xs -> foldl ejecutar (rob, ds) xs
 
 updateExplosions :: [Explosion] -> [Explosion]
-updateExplosions = filter ((<1.0) . expTime) . map (\e -> e { expTime = expTime e + 0.05 })
+updateExplosions = filter ((<1.2) . expTime) . map (\e -> e { expTime = expTime e + 0.08 })  -- Duración reducida a 1.2, velocidad aumentada a 0.08 para más rapidez
 
--- NUEVA FUNCIÓN: Separar robots que colisionan
+-- Aplicar daño considerando el escudo primero
+aplicarDañoConEscudo :: Float -> Robot -> Robot
+aplicarDañoConEscudo dano robot =
+  let ex = extras robot
+      escudoActual = shield ex
+      dañoAEscudo = min escudoActual dano
+      dañoAVida = max 0 (dano - escudoActual)
+      nuevoEscudo = max 0 (escudoActual - dano)
+      nuevaVida = energy ex - dañoAVida
+      muere = nuevaVida <= 0
+  in robot 
+     { extras = ex 
+       { shield = nuevoEscudo
+       , energy = nuevaVida
+       , shieldRechargeDelay = 2.0  -- 2 segundos de delay antes de recargar
+       , damageFlash = 0.2  -- Activar flash de daño por 0.2 segundos
+       }
+     , explosion = muere
+     , explosionTime = if muere then 0 else explosionTime robot
+     }
+
+-- Recargar escudos con el tiempo
+recargarEscudos :: Float -> [Robot] -> [Robot]
+recargarEscudos dt robots = 
+  [ let ex = extras r
+        delayActual = shieldRechargeDelay ex
+        nuevoDelay = max 0 (delayActual - dt)
+        escudoActual = shield ex
+        escudoMax = maxShield ex
+        recarga = shieldRechargeRate ex
+        -- Solo recarga si el delay llegó a 0 y el escudo no está lleno
+        nuevoEscudo = if nuevoDelay <= 0 && escudoActual < escudoMax
+                     then min escudoMax (escudoActual + recarga * dt)
+                     else escudoActual
+        --  Reducir el timer del flash de daño
+        nuevoFlash = max 0 (damageFlash ex - dt)
+    in r { extras = ex 
+           { shield = nuevoEscudo
+           , shieldRechargeDelay = nuevoDelay
+           , damageFlash = nuevoFlash
+           }
+         }
+  | r <- robots
+  ]
+
+-- FUNCIÓN: Separar robots que colisionan
 separarRobotsEnColision :: [(Int, Int)] -> [Robot] -> [Robot]
 separarRobotsEnColision colisiones robots =
   let robotMap = Map.fromList [(objectId r, r) | r <- robots]
@@ -496,7 +574,7 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
                 obstaculosActualizados
 
             nuevasExplosionesObstaculos =
-              [ Explosion (position o) 0 3.5 | o <- obstaculosExplosivos ]
+              [ Explosion (position o) 0 1.2 | o <- obstaculosExplosivos ]  -- Reducido de 3.5 a 1.2
 
             obstaculosFinales =
               [ if objectId o `elem` map objectId obstaculosExplosivos
@@ -532,14 +610,22 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               case (find ((== rid1) . objectId) rs, find ((== rid2) . objectId) rs) of
                 (Just r1, Just r2) | RB.esEnemigo r1 r2 ->
                   [ if objectId r == rid1 || objectId r == rid2
-                    then r { extras = (extras r) { energy = energy (extras r) - 12 }
-                           , explosion = energy (extras r) <= 12
-                           , explosionTime = if energy (extras r) <= 12 then 0 else explosionTime r }
+                    then aplicarDañoConEscudo 8 r  -- Usar nueva función con escudo
                     else r | r <- rs ]
                 _ -> rs
 
+            --  Aplicar daño de obstáculos Dañino (pinchos)
+            robotsConDañoObstaculos = foldl aplicarDañoObstaculo robotsConDañoColision colRO
+            aplicarDañoObstaculo rs (rid, oid) =
+              case (find ((== rid) . objectId) rs, find ((== oid) . objectId) obstaculosFinales) of
+                (Just r, Just obs) | tipoObs (extras obs) == Dañino ->
+                  [ if objectId robot == rid
+                    then aplicarDañoConEscudo (dañoObs (extras obs) * dt) robot  -- Daño proporcional al tiempo
+                    else robot | robot <- rs ]
+                _ -> rs
+
             robotsSeparadosDeObstaculos =
-              separarRobotsDeObstaculos colRO robotsConDañoColision obstaculosFinales
+              separarRobotsDeObstaculos colRO robotsConDañoObstaculos obstaculosFinales
 
             robotsSeparados =
               separarRobotsEnColision colRR robotsSeparadosDeObstaculos
@@ -556,9 +642,7 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
                        factor = max 0 (1 - dist / radio)
                        danoFinal = dano * factor
                    in if dist <= radio && danoFinal > 0
-                      then r { extras = (extras r) { energy = energy (extras r) - danoFinal }
-                             , explosion = energy (extras r) - danoFinal <= 0
-                             , explosionTime = if energy (extras r) - danoFinal <= 0 then 0 else explosionTime r }
+                      then aplicarDañoConEscudo danoFinal r  -- Usar nueva función con escudo
                       else r
                  | r <- rs ]
 
@@ -569,14 +653,14 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               ]
 
             nuevasExplosiones =
-              [ Explosion (position p) 0 1.0
+              [ Explosion (position p) 0 0.5  -- Reducido de 1.0 a 0.5
               | (_, pid) <- colRP
               , p <- disparosMovidos
               , objectId p == pid
               ]
 
             nuevasExplosionesBalasObstaculos =
-              [ Explosion (position p) 0 1.0
+              [ Explosion (position p) 0 0.5  -- Reducido de 1.0 a 0.5
               | (pid, _) <- colPO
               , p <- disparosMovidos
               , objectId p == pid
@@ -590,12 +674,9 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
                   let shooterId = ownerId (extras p)
                   in case find ((== shooterId) . objectId) robots of
                        Just shooter | RB.esEnemigo robot shooter ->
-                         let e = energy (extras robot) - damage (extras p)
-                         in [ if objectId r == rid
-                              then r { extras = (extras r) { energy = e }
-                                     , explosion = e <= 0
-                                     , explosionTime = if e <= 0 then 0 else explosionTime r }
-                              else r | r <- rs ]
+                         [ if objectId r == rid
+                           then aplicarDañoConEscudo (damage (extras p)) r  -- Usar nueva función con escudo
+                           else r | r <- rs ]
                        _ -> rs
                 _ -> rs
 
@@ -612,9 +693,12 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               | r <- robotsDañados
               , not (explosion r && explosionTime r > 1.5)
               ]
+            
+            --  Recargar escudos de robots vivos
+            robotsConEscudoRecargado = recargarEscudos dt robotsFinal
 
           in
-            w { robots     = robotsFinal
+            w { robots     = robotsConEscudoRecargado
               , shots      = shotsRestantes
               , explosions = updateExplosions (explosions ++ nuevasExplosiones ++ nuevasExplosionesObstaculos ++ nuevasExplosionesBalasObstaculos)
               , obstaculos = obstaculosFinales
@@ -624,7 +708,7 @@ stepWorld dt w@World{gs, robots, shots, explosions, tick, elapsed, estado, endTi
               , ganador    = nuevoGanador
             }
 
--- NUEVO: Dibujar obstáculos
+--  Dibujar obstáculos
 drawObstaculo :: Size -> Obstaculo -> G.Picture
 drawObstaculo ws obs =
   let (x, y) = worldToScreen ws (position obs)
@@ -674,8 +758,8 @@ spawnBando n gs seed tipoRobot offsetId =
     sizeRobot Humano = V2 35 28  -- Reducido de 45x35 a 35x28
     sizeRobot Zombie = V2 45 35  -- Reducido de 60x45 a 45x35
 
-    energiaInicial Humano = 200
-    energiaInicial Zombie = 250
+    energiaInicial Humano = 300  -- Aumentado de 200 a 300 para mayor durabilidad
+    energiaInicial Zombie = 350  -- Aumentado de 250 a 350 para mayor durabilidad
 
     rangoVision Humano = 400
     rangoVision Zombie = 350
@@ -683,23 +767,23 @@ spawnBando n gs seed tipoRobot offsetId =
     velocidadMovimiento Humano = 65
     velocidadMovimiento Zombie = 75
 
--- NUEVO: Generar obstáculos aleatorios
+--  Generar obstáculos aleatorios
 
--- NUEVO: Generar obstáculos aleatorios
+-- Generar obstáculos aleatorios
 generarObstaculos :: Int -> Float -> Float -> [Obstaculo]
 generarObstaculos seed worldW worldH =
   let
       margen = 140
-      totalBloqueantes = 2
-      totalDaninos     = 2
-      totalExplosivos  = 8
+      totalBloqueantes = 4  -- Reducido de 8 a 4
+      totalDaninos     = 3  -- Reducido de 6 a 3
+      totalExplosivos  = 6  -- Reducido de 12 a 6
 
       esc1 = 0.08
       esc2=0.15
 
       tam Bloqueante =
         let (sw,sh) = tamSpriteBloqueante
-        in V2 (sw * 0.20) (sh * 0.20)
+        in V2 (sw * 0.10) (sh * 0.10)  -- Reducido de 0.20 a 0.10 (50% más pequeños)
 
       tam Dañino =
         let (sw,sh) = tamSpriteDanino
@@ -740,8 +824,8 @@ generarObstaculos seed worldW worldH =
           , extras =
               ObstaculoData
                 tipo        -- tipoObs
-                100          -- dañoObs
-                400         -- radioExplosion
+                60          -- dañoObs - Reducido de 100 a 60 para mayor durabilidad
+                350         -- radioExplosion - Reducido de 400 a 350 para explosiones más pequeñas
                 3           -- tiempoVida (cuenta atrás)
                 False       -- exploto
                 False       -- activado

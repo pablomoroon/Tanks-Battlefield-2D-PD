@@ -26,26 +26,54 @@ drawRobot ws r
 
           escala2 = 0.05
 
-          colorTint = G.makeColorI 255 255 255 255
+          --  : Efecto de flash cuando recibe daño
+          flashIntensity = damageFlash (extras r)
+          flashActive = flashIntensity > 0
+          
+          -- Si está en flash, añadir un tinte rojo
+          colorTint = if flashActive
+                      then G.makeColorI 255 (round (100 * (1 - flashIntensity / 0.2))) (round (100 * (1 - flashIntensity / 0.2))) 255
+                      else G.makeColorI 255 255 255 255
 
           vidaActual = energy (extras r)
           vidaMax = case tipo (extras r) of
-            Humano -> 200  -- ACTUALIZADO de 100 a 200
-            Zombie -> 250  -- ACTUALIZADO de 150 a 250
+            Humano -> 300  -- ACTUALIZADO
+            Zombie -> 350  -- ACTUALIZADO
           porcentajeVida = vidaActual / vidaMax
+          
+          --  : Escudo
+          escudoActual = shield (extras r)
+          escudoMax = maxShield (extras r)
+          porcentajeEscudo = escudoActual / escudoMax
+          
           anchoBarraMax = 40
-          anchoBarraActual = anchoBarraMax * porcentajeVida
+          anchoBarraVida = anchoBarraMax * porcentajeVida
+          anchoBarraEscudo = anchoBarraMax * porcentajeEscudo
 
           colorVida
             | porcentajeVida > 0.6 = G.green
             | porcentajeVida > 0.3 = G.yellow
             | otherwise = G.red
 
-          barraVida = G.Translate 0 25 $ G.Pictures
+          -- Barra de vida (abajo)
+          barraVida = G.Translate 0 22 $ G.Pictures
             [ G.Color G.black (G.rectangleWire anchoBarraMax 6)
-            , G.Translate (- ((anchoBarraMax - anchoBarraActual) / 2)) 0
-                (G.Color colorVida (G.rectangleSolid anchoBarraActual 5))
+            , G.Translate (- ((anchoBarraMax - anchoBarraVida) / 2)) 0
+                (G.Color colorVida (G.rectangleSolid anchoBarraVida 5))
             ]
+          
+          --  : Barra de escudo (arriba de la vida)
+          barraEscudo = G.Translate 0 28 $ G.Pictures
+            [ G.Color (G.greyN 0.3) (G.rectangleWire anchoBarraMax 4)
+            , G.Translate (- ((anchoBarraMax - anchoBarraEscudo) / 2)) 0
+                (G.Color (G.makeColorI 50 150 255 255) (G.rectangleSolid anchoBarraEscudo 3))
+            ]
+          
+          --  : Efecto visual de impacto (anillo rojo parpadeante)
+          efectoImpacto = if flashActive
+                          then G.Color (G.withAlpha flashIntensity G.red) 
+                                 (G.ThickCircle 25 3)
+                          else G.Blank
 
           dibujoCanon = case tipo (extras r) of
             Humano -> G.Rotate (-(angCanon - 90))
@@ -56,7 +84,9 @@ drawRobot ws r
            [ G.Rotate (-angCuerpo+90)
                (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
            , dibujoCanon
+           , efectoImpacto
            , barraVida
+           , barraEscudo
            ]
 
 explosionPicture :: Float -> G.Picture
