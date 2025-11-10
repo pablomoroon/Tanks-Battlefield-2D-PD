@@ -1,0 +1,23 @@
+# Configuración del Sistema de Torneos
+# Cada línea representa un parámetro de configuración
+
+# Número de robots Humanos por torneo
+humanos=9
+
+# Número de robots Zombies por torneo
+zombies=9
+
+# Índice del mapa a utilizar (0=Bosque, 1=Desierto, 2=Ciudad)
+mapa=0
+
+# Ancho del área de torneo (en píxeles)
+ancho=1280
+
+# Alto del área de torneo (en píxeles)
+alto=780
+
+# Duración máxima de cada torneo (en segundos)
+duracion=120
+
+# Número total de torneos a ejecutar consecutivamente
+total_torneos=3

@@ -2,12 +2,12 @@
 module Render
   ( worldToScreen
   , drawRobot, drawExplosion, drawImpactExplosion
-  , drawBullet, drawHUDZombies, drawFinJuegoZombies
+  , drawBullet, drawHUDZombies, drawFinJuegoZombies,drawImpactVeneno,drawVeneno,drawSangreZombie
   ) where
 
 import Entidades
 import qualified Graphics.Gloss as G
-import Assets (spriteCuerpo, spriteCanion, spriteZombie,spritesExplosion)
+import Assets (spriteSangre,spriteCuerpo, spriteCanion, spriteZombie,spritesExplosion,spritesVeneno,spriteDanino)
 
 worldToScreen :: Size -> Position -> (Float, Float)
 worldToScreen (V2 w h) (V2 x y) = (x - w/2, y - h/2)
@@ -21,27 +21,24 @@ drawRobot ws r
           angCanon   = anguloCanon r
 
           (spriteBase, escalaSprite) = case tipo (extras r) of
-            Humano -> (spriteCuerpo, 0.10)
-            Zombie -> (spriteZombie, 0.3)
+            Humano -> (spriteCuerpo, 0.1)
+            Zombie -> (spriteZombie, 0.07)
 
           escala2 = 0.05
 
-          --  : Efecto de flash cuando recibe daño
           flashIntensity = damageFlash (extras r)
           flashActive = flashIntensity > 0
           
-          -- Si está en flash, añadir un tinte rojo
           colorTint = if flashActive
                       then G.makeColorI 255 (round (100 * (1 - flashIntensity / 0.2))) (round (100 * (1 - flashIntensity / 0.2))) 255
                       else G.makeColorI 255 255 255 255
 
           vidaActual = energy (extras r)
           vidaMax = case tipo (extras r) of
-            Humano -> 300  -- ACTUALIZADO
-            Zombie -> 350  -- ACTUALIZADO
+            Humano -> 300
+            Zombie -> 350
           porcentajeVida = vidaActual / vidaMax
           
-          --  : Escudo
           escudoActual = shield (extras r)
           escudoMax = maxShield (extras r)
           porcentajeEscudo = escudoActual / escudoMax
@@ -55,39 +52,47 @@ drawRobot ws r
             | porcentajeVida > 0.3 = G.yellow
             | otherwise = G.red
 
-          -- Barra de vida (abajo)
           barraVida = G.Translate 0 22 $ G.Pictures
             [ G.Color G.black (G.rectangleWire anchoBarraMax 6)
             , G.Translate (- ((anchoBarraMax - anchoBarraVida) / 2)) 0
                 (G.Color colorVida (G.rectangleSolid anchoBarraVida 5))
             ]
           
-          --  : Barra de escudo (arriba de la vida)
           barraEscudo = G.Translate 0 28 $ G.Pictures
             [ G.Color (G.greyN 0.3) (G.rectangleWire anchoBarraMax 4)
             , G.Translate (- ((anchoBarraMax - anchoBarraEscudo) / 2)) 0
                 (G.Color (G.makeColorI 50 150 255 255) (G.rectangleSolid anchoBarraEscudo 3))
             ]
           
-          --  : Efecto visual de impacto (anillo rojo parpadeante)
           efectoImpacto = if flashActive
                           then G.Color (G.withAlpha flashIntensity G.red) 
                                  (G.ThickCircle 25 3)
                           else G.Blank
 
+
+          dibujoCuerpo = case tipo (extras r) of
+            Humano ->
+              G.Rotate (-angCuerpo + 90)
+                (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
+            Zombie ->
+              G.Rotate (-angCuerpo)
+                (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
+
+
           dibujoCanon = case tipo (extras r) of
-            Humano -> G.Rotate (-(angCanon - 90))
-                        (G.Translate 0 0 (G.Scale escala2 escala2 spriteCanion))
+            Humano -> 
+              G.Rotate (-(angCanon - 90))
+                (G.Translate 0 0 (G.Scale escala2 escala2 spriteCanion))
             Zombie -> G.Blank
 
       in G.Translate x y $ G.Pictures
-           [ G.Rotate (-angCuerpo+90)
-               (G.Color colorTint (G.Scale escalaSprite escalaSprite spriteBase))
+           [ dibujoCuerpo
            , dibujoCanon
            , efectoImpacto
            , barraVida
            , barraEscudo
            ]
+
 
 explosionPicture :: Float -> G.Picture
 explosionPicture t = G.Pictures
@@ -110,14 +115,19 @@ drawImpactExplosion ws pos t scale =
       n = length spritesExplosion
       frameIndex = min (n - 1) (floor (t * fromIntegral n))
       frame = spritesExplosion !! frameIndex
-      baseScale = 0.18  -- tamaño base del sprite
+      baseScale = 0.25
   in G.Translate x y $
        G.Scale (baseScale * scale) (baseScale * scale) frame
 
 
 drawBullet :: Size -> Proyectil -> G.Picture
-drawBullet ws p = let (x,y) = worldToScreen ws (position p)
-                  in G.Translate x y (G.Color (G.greyN 0.2) (G.circleSolid 4))
+drawBullet ws p =
+  let (x,y) = worldToScreen ws (position p)
+      pic = case imagenObjeto p of
+              "veneno" -> G.Scale 0.1 0.1 $head spritesVeneno   
+              _        -> G.Color (G.greyN 0.2) (G.circleSolid 4)
+  in G.Translate x y pic
+
 
 drawHUDZombies :: Size -> Int -> Float -> Int -> Int -> G.Picture
 drawHUDZombies (V2 w h) tk t humanos zombies =
@@ -152,3 +162,37 @@ drawFinJuegoZombies mganador =
      , G.Translate (-250) 100 (G.Scale 0.4 0.4 (G.Color G.yellow (G.Text "¡FIN DEL JUEGO!")))
      , G.Translate (-300)  20 (G.Scale 0.28 0.28 (G.Color color (G.Text texto)))
      ]
+
+drawImpactVeneno :: Size -> Position -> Float -> Float -> G.Picture
+drawImpactVeneno ws pos t scale =
+  let (x, y) = worldToScreen ws pos
+      n = length spritesVeneno
+      frameIndex = min (n - 1) (floor (t * fromIntegral n))
+      frame = spritesVeneno !! frameIndex
+      baseScale = 0.18
+  in G.Translate x y $
+       G.Scale (baseScale * scale) (baseScale * scale) frame
+
+drawVeneno :: Size -> Position -> Float -> Float -> G.Picture
+drawVeneno ws pos t scale =
+  let (x, y) = worldToScreen ws pos
+      n = length spriteDanino
+      frameIndex = floor (t * 5) `mod` n       
+
+      frame = spriteDanino !! frameIndex
+      baseScale = 0.75
+  in G.Translate x y $
+       G.Scale (baseScale * scale) (baseScale * scale) frame
+
+
+
+
+drawSangreZombie :: Size -> Position -> Float -> Float -> G.Picture
+drawSangreZombie ws pos t scale =
+  let (x, y) = worldToScreen ws pos
+      n = length spriteSangre
+      frameIndex = min (n - 1) (floor (t * fromIntegral n *2))
+      frame = spriteSangre !! frameIndex
+      baseScale = 0.10
+  in G.Translate x y $
+       G.Scale (baseScale * scale) (baseScale * scale) frame

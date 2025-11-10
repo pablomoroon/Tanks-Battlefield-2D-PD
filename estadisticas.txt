@@ -1,0 +1,105 @@
+=========================================
+TORNEO #1
+=========================================
+Ganador: ZOMBIES
+Duracion: 17.22 segundos
+
+--- HUMANOS ---
+Robots iniciales: 9
+Proyectiles disparados: 76
+Impactos realizados: 75
+Precision: 98.68%
+Tiempo promedio de vida: 7.48 segundos
+Porcentaje de tiempo con vida: 43.43%
+
+--- ZOMBIES ---
+Robots iniciales: 9
+Proyectiles disparados: 109
+Impactos realizados: 84
+Precision: 77.06%
+Tiempo total de vida: 137.17 segundos
+Porcentaje de tiempo con vida: 88.52%
+
+=========================================
+TORNEO #2
+=========================================
+Ganador: ZOMBIES
+Duracion: 19.30 segundos
+
+--- HUMANOS ---
+Robots iniciales: 9
+Proyectiles disparados: 66
+Impactos realizados: 61
+Precision: 92.42%
+Tiempo promedio de vida: 9.32 segundos
+Porcentaje de tiempo con vida: 48.29%
+
+--- ZOMBIES ---
+Robots iniciales: 9
+Proyectiles disparados: 78
+Impactos realizados: 56
+Precision: 71.79%
+Tiempo total de vida: 162.80 segundos
+Porcentaje de tiempo con vida: 93.73%
+
+=========================================
+TORNEO #3
+=========================================
+Ganador: ZOMBIES
+Duracion: 29.77 segundos
+
+--- HUMANOS ---
+Robots iniciales: 9
+Proyectiles disparados: 106
+Impactos realizados: 95
+Precision: 89.62%
+Tiempo promedio de vida: 12.42 segundos
+Porcentaje de tiempo con vida: 41.74%
+
+--- ZOMBIES ---
+Robots iniciales: 9
+Proyectiles disparados: 50
+Impactos realizados: 43
+Precision: 86.00%
+Tiempo total de vida: 160.32 segundos
+Porcentaje de tiempo con vida: 59.84%
+
+
+=========================================
+RESUMEN FINAL - TODOS LOS TORNEOS
+=========================================
+Total de torneos: 3
+
+--- RESULTADOS GLOBALES ---
+Victorias Humanos: 0 (0.0%)
+Victorias Zombies: 3 (100.0%)
+Empates: 0
+
+--- ESTADISTICAS AGREGADAS HUMANOS ---
+Total proyectiles disparados: 248
+Total impactos: 231
+Precision global: 93.15%
+Promedio disparos por torneo: 82.7
+Promedio impactos por torneo: 77.0
+Promedio tiempo de vida: 87.67 segundos
+
+--- ESTADISTICAS AGREGADAS ZOMBIES ---
+Total proyectiles disparados: 237
+Total impactos: 183
+Precision global: 77.22%
+Promedio disparos por torneo: 79.0
+Promedio impactos por torneo: 61.0
+Promedio tiempo de vida: 153.43 segundos
+
+--- DURACIONES ---
+Duracion promedio: 22.09 segundos
+Duracion maxima: 29.77 segundos
+Duracion minima: 17.22 segundos
+
+=========================================
+Configuracion utilizada:
+Humanos por torneo: 9
+Zombies por torneo: 9
+Duracion maxima: 120.0 segundos
+Area: (1280.0,780.0)
+=========================================

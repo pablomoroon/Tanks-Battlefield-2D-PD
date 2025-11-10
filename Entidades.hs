@@ -6,7 +6,7 @@ module Entidades
   , Objeto(..), RobotData(..), ProyectilData(..), Robot, Proyectil
   , TipoRobot(..)
   , TipoObstaculo(..), ObstaculoData(..), Obstaculo
-  , Action(..), GameState(..), BotAction(..)
+  , Action(..), GameState(..), BotAction(..),Explosion(..)
   ) where
 
 
@@ -84,6 +84,7 @@ data RobotData = RobotData
 data ProyectilData = ProyectilData
   { damage   :: Float
   , ownerId  :: Int
+  , ownerTipo :: TipoRobot  -- Tipo del robot que disparó (para evitar fuego amigo)
   } deriving (Show, Eq)
 
 --  : Tipos de obstáculos
@@ -99,7 +100,14 @@ data ObstaculoData = ObstaculoData
   , animFrame      :: Int
   , animTimer      :: Float      
   } deriving (Show, Eq)
-     
+
+data Explosion = Explosion
+  { expPos   :: Position
+  , expTime  :: Float
+  , expScale :: Float
+  , expTipo  :: String     
+  } deriving (Show, Eq)
+  
 
 
 
