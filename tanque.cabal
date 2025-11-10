@@ -24,3 +24,26 @@ executable Tanks-colision-sprite
         Fisicas
         Colisiones
         Memoria
+
+executable Torneos
+  hs-source-dirs:      .
+  main-is:             torneos.hs
+  build-depends:
+        base >=4.12 && <5,
+        gloss >=1.13,
+        gloss-juicy >=0.2.3,
+        containers,
+        directory,
+        filepath,
+        time,
+        random
+  default-language:    Haskell2010
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  other-modules:
+        Assets
+        Render
+        Entidades
+        Robot
+        Fisicas
+        Colisiones
+        Memoria
