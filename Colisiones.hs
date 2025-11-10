@@ -24,10 +24,14 @@ objectVertices obj = (^+^ V2 x y) <$> rotated
   where
     V2 x y = position obj
     V2 w h = size obj
-    hw  = w / 2
-    hh  = h / 2
+   
+    margenExtra = case imagenObjeto obj of
+      "obstaculo_bloqueante" -> -14
+      "obstaculo_explosivo" -> 0
+      _ -> 0
+    hw  = (w + margenExtra) / 2
+    hh  = (h + margenExtra) / 2
     base = [ V2 (-hw) (-hh), V2 hw (-hh), V2 hw hh, V2 (-hw) hh ]
-    -- Usar el ángulo del cuerpo para las colisiones
     rotated = getVertices (base !! 0, base !! 1, base !! 2, base !! 3, angulo obj)
 
 axes :: [Point] -> [Vector]
@@ -74,7 +78,7 @@ checkCollisions :: [Robot] -> [Proyectil] -> ([(Int, Int)], [(Int, Int)])
 checkCollisions robots projectiles =
   (detectRobotRobotCollisions robots, detectRobotProjectileCollisions robots projectiles)
 
--- NUEVO: Detectar colisiones entre robots y obstáculos
+
 detectRobotObstaculoCollisions :: [Robot] -> [Obstaculo] -> [(Int, Int)]
 detectRobotObstaculoCollisions robots obstaculos =
   [ (objectId r, objectId o)
@@ -83,7 +87,7 @@ detectRobotObstaculoCollisions robots obstaculos =
   , checkCollision r o
   ]
 
--- NUEVO: Detectar colisiones entre proyectiles y obstáculos
+
 detectProyectilObstaculoCollisions :: [Proyectil] -> [Obstaculo] -> [(Int, Int)]
 detectProyectilObstaculoCollisions proyectiles obstaculos =
   [ (objectId p, objectId o)

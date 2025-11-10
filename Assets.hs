@@ -7,10 +7,10 @@ import Graphics.Gloss.Juicy (loadJuicyPNG)
 import System.IO.Unsafe (unsafePerformIO)
 
 --------------------------------------------------------------------------------
--- FUNCIONES AUXILIARES
+
 --------------------------------------------------------------------------------
 
--- Carga segura: si no existe el archivo, muestra un aviso y devuelve un rectángulo de color.
+
 loadSprite :: FilePath -> G.Picture -> G.Picture
 loadSprite path fallback = unsafePerformIO $ do
   maybeImg <- loadJuicyPNG path
@@ -21,7 +21,7 @@ loadSprite path fallback = unsafePerformIO $ do
       return fallback
 
 --------------------------------------------------------------------------------
--- SPRITES DE ROBOTS / PERSONAJES
+
 --------------------------------------------------------------------------------
 
 {-# NOINLINE spriteCuerpo #-}
@@ -43,7 +43,7 @@ spriteZombie =
              (G.Color G.green (G.rectangleSolid 64 32))
 
 --------------------------------------------------------------------------------
--- MAPAS
+
 --------------------------------------------------------------------------------
 
 {-# NOINLINE mapaBosque #-}
@@ -70,7 +70,7 @@ mapaCiudad = unsafePerformIO $ do
     loadSprite "Assets/mapaCiudad.png"
                (G.Color (G.greyN 0.3) (G.rectangleSolid 200 200))
 
--- Tamaño REAL (en píxeles) de cada sprite de obstáculo
+
 tamSpriteBloqueante :: (Float, Float)
 tamSpriteBloqueante = (1024 , 1024 )
 
@@ -87,14 +87,14 @@ obtenerMapa i = case i `mod` 3 of
   1 -> mapaDesierto
   _ -> mapaCiudad
 
--- Escalar mapa para ocupar toda la pantalla
+
 escalarMapaAlFondo :: Float -> Float -> G.Picture -> G.Picture
 escalarMapaAlFondo w h img = G.Scale (w / iw) (h / ih) img
   where
     (iw, ih) = (1050, 1070)
 
 --------------------------------------------------------------------------------
--- SPRITES DE OBSTÁCULOS
+
 --------------------------------------------------------------------------------
 
 {-# NOINLINE spriteObsBloqueante #-}
@@ -104,12 +104,17 @@ spriteObsBloqueante =
              (G.Color (G.greyN 0.4) (G.rectangleSolid 256 256))
 
 {-# NOINLINE spriteDanino #-}
-spriteDanino :: G.Picture
+spriteDanino :: [G.Picture]
 spriteDanino = unsafePerformIO $ do
-  maybeImg <- loadJuicyPNG "Assets/trampa_simple.png"
-  case maybeImg of
-    Just img -> return img
-    Nothing  -> return $ G.Color (G.makeColorI 200 50 50 255) (G.rectangleSolid 100 100)
+  let paths =
+        [ "Assets/trampaVen1.png"
+        , "Assets/trampaVen2.png"
+        , "Assets/trampaVen3.png"
+        , "Assets/trampaVen4.png"
+        ]
+  imgs <- mapM loadJuicyPNG paths
+  return [img | Just img <- imgs]
+
 
 {-# NOINLINE spriteExplosivo #-}
 spriteExplosivo :: G.Picture
@@ -139,6 +144,30 @@ spritesBomber = unsafePerformIO $ do
         , "Assets/bomber2.png"
         , "Assets/bomber3.png"
         , "Assets/bomber4.png"
+        ]
+  imgs <- mapM loadJuicyPNG paths
+  return [img | Just img <- imgs]
+
+{-# NOINLINE spritesVeneno #-}
+spritesVeneno :: [G.Picture]
+spritesVeneno = unsafePerformIO $ do
+  let paths =
+        [ "Assets/veneno1.png"
+        , "Assets/veneno2.png"
+        , "Assets/veneno3.png"
+        , "Assets/veneno4.png"
+        ]
+  imgs <- mapM loadJuicyPNG paths
+  return [img | Just img <- imgs]
+
+{-# NOINLINE spriteSangre #-}
+spriteSangre :: [G.Picture]
+spriteSangre = unsafePerformIO $ do
+  let paths =
+        [ "Assets/Exveneno1.png"
+        , "Assets/Exveneno2.png"
+        , "Assets/Exveneno3.png"
+        , "Assets/Exveneno4.png"
         ]
   imgs <- mapM loadJuicyPNG paths
   return [img | Just img <- imgs]
