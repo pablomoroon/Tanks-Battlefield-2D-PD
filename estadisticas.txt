@@ -2,67 +2,67 @@
 TORNEO #1
 =========================================
 Ganador: ZOMBIES
-Duracion: 17.22 segundos
+Duracion: 21.77 segundos
 
 --- HUMANOS ---
 Robots iniciales: 9
-Proyectiles disparados: 76
-Impactos realizados: 75
-Precision: 98.68%
-Tiempo promedio de vida: 7.48 segundos
-Porcentaje de tiempo con vida: 43.43%
+Proyectiles disparados: 77
+Impactos realizados: 64
+Precision: 83.12%
+Tiempo promedio de vida: 9.71 segundos
+Porcentaje de tiempo con vida: 44.59%
 
 --- ZOMBIES ---
 Robots iniciales: 9
-Proyectiles disparados: 109
-Impactos realizados: 84
-Precision: 77.06%
-Tiempo total de vida: 137.17 segundos
-Porcentaje de tiempo con vida: 88.52%
+Proyectiles disparados: 42
+Impactos realizados: 34
+Precision: 80.95%
+Tiempo total de vida: 167.85 segundos
+Porcentaje de tiempo con vida: 85.68%
 
 =========================================
 TORNEO #2
 =========================================
 Ganador: ZOMBIES
-Duracion: 19.30 segundos
+Duracion: 14.10 segundos
 
 --- HUMANOS ---
 Robots iniciales: 9
-Proyectiles disparados: 66
-Impactos realizados: 61
-Precision: 92.42%
-Tiempo promedio de vida: 9.32 segundos
-Porcentaje de tiempo con vida: 48.29%
+Proyectiles disparados: 40
+Impactos realizados: 34
+Precision: 85.00%
+Tiempo promedio de vida: 5.23 segundos
+Porcentaje de tiempo con vida: 37.10%
 
 --- ZOMBIES ---
 Robots iniciales: 9
-Proyectiles disparados: 78
-Impactos realizados: 56
-Precision: 71.79%
-Tiempo total de vida: 162.80 segundos
-Porcentaje de tiempo con vida: 93.73%
+Proyectiles disparados: 33
+Impactos realizados: 32
+Precision: 96.97%
+Tiempo total de vida: 117.20 segundos
+Porcentaje de tiempo con vida: 92.36%
 
 =========================================
 TORNEO #3
 =========================================
-Ganador: ZOMBIES
-Duracion: 29.77 segundos
+Ganador: HUMANOS
+Duracion: 49.22 segundos
 
 --- HUMANOS ---
 Robots iniciales: 9
-Proyectiles disparados: 106
-Impactos realizados: 95
-Precision: 89.62%
-Tiempo promedio de vida: 12.42 segundos
-Porcentaje de tiempo con vida: 41.74%
+Proyectiles disparados: 142
+Impactos realizados: 96
+Precision: 67.61%
+Tiempo promedio de vida: 23.77 segundos
+Porcentaje de tiempo con vida: 48.30%
 
 --- ZOMBIES ---
 Robots iniciales: 9
-Proyectiles disparados: 50
-Impactos realizados: 43
-Precision: 86.00%
-Tiempo total de vida: 160.32 segundos
-Porcentaje de tiempo con vida: 59.84%
+Proyectiles disparados: 52
+Impactos realizados: 50
+Precision: 96.15%
+Tiempo total de vida: 232.95 segundos
+Porcentaje de tiempo con vida: 52.59%
 
 
 =========================================
@@ -71,30 +71,30 @@ RESUMEN FINAL - TODOS LOS TORNEOS
 Total de torneos: 3
 
 --- RESULTADOS GLOBALES ---
-Victorias Humanos: 0 (0.0%)
-Victorias Zombies: 3 (100.0%)
+Victorias Humanos: 1 (33.3%)
+Victorias Zombies: 2 (66.7%)
 Empates: 0
 
 --- ESTADISTICAS AGREGADAS HUMANOS ---
-Total proyectiles disparados: 248
-Total impactos: 231
-Precision global: 93.15%
-Promedio disparos por torneo: 82.7
-Promedio impactos por torneo: 77.0
-Promedio tiempo de vida: 87.67 segundos
+Total proyectiles disparados: 259
+Total impactos: 194
+Precision global: 74.90%
+Promedio disparos por torneo: 86.3
+Promedio impactos por torneo: 64.7
+Promedio tiempo de vida: 116.12 segundos
 
 --- ESTADISTICAS AGREGADAS ZOMBIES ---
-Total proyectiles disparados: 237
-Total impactos: 183
-Precision global: 77.22%
-Promedio disparos por torneo: 79.0
-Promedio impactos por torneo: 61.0
-Promedio tiempo de vida: 153.43 segundos
+Total proyectiles disparados: 127
+Total impactos: 116
+Precision global: 91.34%
+Promedio disparos por torneo: 42.3
+Promedio impactos por torneo: 38.7
+Promedio tiempo de vida: 172.67 segundos
 
 --- DURACIONES ---
-Duracion promedio: 22.09 segundos
-Duracion maxima: 29.77 segundos
-Duracion minima: 17.22 segundos
+Duracion promedio: 28.36 segundos
+Duracion maxima: 49.22 segundos
+Duracion minima: 14.10 segundos
 
 =========================================
 Configuracion utilizada:

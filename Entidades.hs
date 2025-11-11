@@ -6,9 +6,8 @@ module Entidades
   , Objeto(..), RobotData(..), ProyectilData(..), Robot, Proyectil
   , TipoRobot(..)
   , TipoObstaculo(..), ObstaculoData(..), Obstaculo
-  , Action(..), GameState(..), BotAction(..),Explosion(..)
+  , Action(..), GameState(..), BotAction(..), Explosion(..)
   ) where
-
 
 import Control.Applicative (liftA2)
 
@@ -34,7 +33,7 @@ V2 x y ^* s = V2 (x*s) (y*s)
 (*^) :: Num a => a -> Vec2 a -> Vec2 a
 s *^ V2 x y = V2 (s*x) (s*y)
 
-type Point    = Vec2 Float 
+type Point    = Vec2 Float
 type Vector   = Vec2 Float
 type Angle    = Float
 type Distance = Float
@@ -60,34 +59,32 @@ data Objeto a = Objeto
 data TipoRobot = Humano | Zombie deriving (Show, Eq)
 
 data RobotData = RobotData
-  { name   :: String
-  , energy :: Float
-  , shield :: Float              
-  , maxShield :: Float           
-  , shieldRechargeRate :: Float  
-  , shieldRechargeDelay :: Float 
-  , damageFlash :: Float         
-  , range  :: Distance
-  , speed  :: Float
-  , tipo :: TipoRobot
-  , memTarget :: Maybe Int        
-  , memRole   :: Maybe String     
-  , memLastSeen :: Maybe Position 
-  , memAggroCooldown :: Int       
-  , memLastPosition :: Maybe Position  --  Última posición registrada
-  , memStuckCounter :: Int             --  Contador de tiempo estancado
-  , memLastMoveDir :: Maybe Vector     --  Última dirección de movimiento exitosa
-  , memPositionHistory :: [Position]   -- Historial de últimas 10 posiciones
-  , memFailedDestinations :: [Position] --  Destinos que no funcionaron
+  { name                 :: String
+  , energy               :: Float
+  , shield               :: Float
+  , maxShield            :: Float
+  , shieldRechargeRate   :: Float
+  , shieldRechargeDelay  :: Float
+  , damageFlash          :: Float
+  , range                :: Distance
+  , speed                :: Float
+  , tipo                 :: TipoRobot
+  , memTarget            :: Maybe Int
+  , memLastSeen          :: Maybe Position
+  , memAggroCooldown     :: Int
+  , memLastPosition      :: Maybe Position
+  , memStuckCounter      :: Int
+  , memLastMoveDir       :: Maybe Vector
+  , memPositionHistory   :: [Position]
+  , memFailedDestinations :: [Position]
   } deriving (Show, Eq)
 
 data ProyectilData = ProyectilData
-  { damage   :: Float
-  , ownerId  :: Int
-  , ownerTipo :: TipoRobot  -- Tipo del robot que disparó (para evitar fuego amigo)
+  { damage    :: Float
+  , ownerId   :: Int
+  , ownerTipo :: TipoRobot
   } deriving (Show, Eq)
 
---  : Tipos de obstáculos
 data TipoObstaculo = Bloqueante | Dañino | Explosivo deriving (Show, Eq)
 
 data ObstaculoData = ObstaculoData
@@ -98,18 +95,15 @@ data ObstaculoData = ObstaculoData
   , exploto        :: Bool
   , activado       :: Bool
   , animFrame      :: Int
-  , animTimer      :: Float      
+  , animTimer      :: Float
   } deriving (Show, Eq)
 
 data Explosion = Explosion
   { expPos   :: Position
   , expTime  :: Float
   , expScale :: Float
-  , expTipo  :: String     
+  , expTipo  :: String
   } deriving (Show, Eq)
-  
-
-
 
 type Robot     = Objeto RobotData
 type Proyectil = Objeto ProyectilData
@@ -134,12 +128,11 @@ data BotAction
     | Accelerate Float
     | Shoot
     | Stop
-  | SetTarget (Maybe Int)        -- Guardar/limpiar objetivo en la memoria del robot
-  | SetRole (Maybe String)       -- Asignar un rol táctico
-  | UpdateLastSeen Position      -- Actualizar última posición vista del objetivo
-  | SetAggroCooldown Int         -- Establecer cooldown/agresividad
-  | UpdateStuckState Position Int (Maybe Vector)  --  : Actualizar estado de estancamiento (posición, contador, dirección)
-  | UpdatePositionHistory Position  --  : Agregar posición al historial
-  | MarkFailedDestination Position  --  : Marcar un destino como fallido
+    | SetTarget (Maybe Int)
+    | UpdateLastSeen Position
+    | SetAggroCooldown Int
+    | UpdateStuckState Position Int (Maybe Vector)
+    | UpdatePositionHistory Position
+    | MarkFailedDestination Position
     | Combo [BotAction]
   deriving (Show, Eq)
